@@ -9,7 +9,7 @@ config = {}
 config['freq'] = 240000000
 #config['freq'] = 160000000
 #-### pass is convoluted with [ ord(x) for x in list(pass) ]
-config['wifi_pass'] = [p, a, s, s]
+config['wifi_pass'] = [112, 97, 115, 115]
 config['wifi_name'] = 'wifiname'
 config['ntp_host'] = 'ntp_server'
 #
