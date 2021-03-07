@@ -9,5 +9,25 @@ So I decided to rewrite it in python (micropython) on esp32.
 
 This is the result. It can mimic and substitute the esp32_mqtt_eq3 solution from softypit, as it accepts the same mqtt input and returns similar mqtt json output.
 
+# Status
+
+It works quite stable. More stable for me than esp32_mqtt_eq3 solution.
+I added also work list (so multpiple work can be added, and it will be done one after another).
+This solution reads data from Mijia sensors. Plan is to add BME280 and other "local" sensors.
+It also does BLE scans, and can report bluetooth devices in the area (for presence testing etc.).
+
+Communication is done by MQTT, and the syntax is near to identical to esp32_mqtt_eq3 so it can be substituted.
+The syntax is still simpler than esp32_mqtt_eq3.
+
+Serial or WebREPL can be used. THere are some useful functions on the device.
+
+# References
+
+ - wifi works fine
+ - ble works fine
+ - mqtt - most robust library chosen
+ - https://github.com/fizista/micropython-umqtt.simple2 with https://github.com/fizista/micropython-umqtt.robust2
+ - not clear if necessary
+
 # Other interesting liks
 https://github.com/softypit/esp32_mqtt_eq3
