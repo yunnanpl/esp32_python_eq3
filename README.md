@@ -32,6 +32,19 @@ Serial or WebREPL can be used. THere are some useful functions on the device.
    - if there is a not-yet-processed work in the list for setting temp, then another work for the same device overwrites previous command
  - is persistent, if the device is known, but does not respond in 10-20 sec slot, then work is put at the end, and new work is done 
    
+## Plan
+ - add basic AP for configuration
+ - add basic status and control webpage
+ - add other temperature sensors like Mijia, BME280, etc.
+ - add PID regulator for automatic temperature regulation
+   - in case of real temperature input
+ - add automatic integration in home assistant (yes, I am using hass :D).
+ - add other basic info, like battery, mode, etc.
+ - add offset setting, both in eq3 and "external" through esp32
+ - think about adding support for the new firmware version of eq3 (later :D)
+ - add white-list and black-list to enforce or ignore some devices
+ - maybe - add temperature history and eq3 setting history graph
+
 # References
 
  - mqtt - most robust library chosen
