@@ -21,13 +21,22 @@ The syntax is still simpler than esp32_mqtt_eq3.
 
 Serial or WebREPL can be used. THere are some useful functions on the device.
 
+## Features (and anti-features)
+ - NO webpage
+ - NO AP configuration (only config file)
+ - robust WIFI, survives disconnections, reconnects, etc.
+ - robust BLE, survives bad addresses, bad messages, disconnections, etc. Has automatic connections cleaning.
+ - robust MQTT, survives disconnections, automatically resubscribes, etc.
+ - has "unique" worklist
+   - if the same message will be sent 5 times, it will be processed once
+   - if there is a not-yet-processed work in the list for setting temp, then another work for the same device overwrites previous command
+ - is persistent, if the device is known, but does not respond in 10-20 sec slot, then work is put at the end, and new work is done 
+   
 # References
 
- - wifi works fine
- - ble works fine
  - mqtt - most robust library chosen
- - https://github.com/fizista/micropython-umqtt.simple2 with https://github.com/fizista/micropython-umqtt.robust2
- - not clear if necessary
+   - https://github.com/fizista/micropython-umqtt.simple2 with https://github.com/fizista/micropython-umqtt.robust2
+   - not clear if necessary
 
 # Other interesting liks
 https://github.com/softypit/esp32_mqtt_eq3
