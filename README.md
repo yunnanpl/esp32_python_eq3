@@ -42,6 +42,10 @@ Serial or WebREPL can be used. THere are some useful functions on the device.
  - add other basic info, like battery, mode, etc.
  - add offset setting, both in eq3 and "external" through esp32
  - think about adding support for the new firmware version of eq3 (later :D)
+   - maybe not so tragic at all, it has to do with the new pairing
+   - https://github.com/rytilahti/python-eq3bt/issues/41
+   - and micropython ble seems to support pairing already
+   - https://github.com/micropython/micropython/pull/6651
  - add white-list and black-list to enforce or ignore some devices
  - maybe - add temperature history and eq3 setting history graph
 
