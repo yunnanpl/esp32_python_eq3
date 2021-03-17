@@ -21,6 +21,34 @@ The syntax is still simpler than esp32_mqtt_eq3.
 
 Serial or WebREPL can be used. THere are some useful functions on the device.
 
+## Tests
+After 10 days, 4 ESP32 are running stable. No signal or command lost (none noticed).
+
+## Shell
+It is possible to connect to shell of MicroPython for some extra functionality.
+For this, it is reasonable to setup and use WebREPL, to issue commands and upgrade scripts remotely.
+http://micropython.org/webrepl/
+
+There are internal functions:
+ - fprint()
+   - to cleanly print all visible clients (if not visible, removed after 2 hours)
+ - fclean()
+   - triggers cleaning
+ - fble_scan()
+   - triggers BLE scan, if triggered from console, it is longer than automatic one
+ - (time.ticks_ms()/1000/60/60/24)
+   - prints uptime in days
+   - this will be cleaned up
+and variables:
+ - vglob
+   - global work settings
+   - if status is 8, then waiting, otherwise working
+ - vglob_list
+   - variable with list of visible clients
+   - this can be printed nicely with fprint()
+ - vwork
+   - work list, it is usually empty
+
 ## Features (and anti-features)
  - NO webpage
  - NO AP configuration (only config file)
