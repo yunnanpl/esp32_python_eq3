@@ -408,8 +408,7 @@ Links: <a href="/hits.txt">Hits</a>, <a href="/countsnh">Counts hourly</a>, <a h
 <pre>
 """ + str( fprint('get') ) + """
 </pre>
-<h2>Graph (hourly consumption)</h2>
-<div style="width: 600px; height: 500px;"><canvas id="jschart"></canvas></div>
+<h2>Other</h2>
 </body>
 </html>"""
   return( html )
