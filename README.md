@@ -39,6 +39,7 @@ There are internal functions:
  - (time.ticks_ms()/1000/60/60/24)
    - prints uptime in days
    - this will be cleaned up
+
 and variables:
  - vglob
    - global work settings
