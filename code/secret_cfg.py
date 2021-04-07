@@ -24,6 +24,6 @@ config2['mqtt_pass'] = 'mqtt_pass'
 #-### if keep loop is set to 0, then loops die
 #-### if you want to kill loops/threads, set this to 0
 #-### good for debugging and responsiver webrepl
-#config2['loop'] = 1
+config2['loop'] = 1
 
 #-### done here

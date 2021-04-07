@@ -19,6 +19,7 @@ from micropython import const
 import ubluetooth
 import gc
 import _thread
+import socket
 #import umqtt
 import robust2 as umqtt
 from collections import OrderedDict

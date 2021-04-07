@@ -1,7 +1,11 @@
-# ### v 0.20
+# ### v 0.21
 
 # whitelist here
 # blacklist here
+
+# get uptime (time.ticks_ms()/1000/60/60/24)
+# or set time.time() as a boot time
+uptime = time.time()
 
 # ### define global variables
 vglob = {}
@@ -70,17 +74,25 @@ def fdecode_addr(addr):
 
 def fprint(cmd='show'):
     global vglob_list
+    ret = ""
     for iii in vglob_list.items():
-        if cmd == 'clean' and time.time() - iii[1][3] > 7200:
-           vglob_list.pop(iii[0])
-        print(iii[0], (time.time() - iii[1][3]), iii[1][1], iii[1][2])
-
+       if cmd == 'clean' and time.time() - iii[1][3] > 7200:
+          vglob_list.pop(iii[0])
+       ret += str(iii[0])+" "+ str(time.time() - iii[1][3]) +" "+ str(iii[1][1]) +" "+ str(iii[1][2]) +"\n"
+    if cmd == 'show':
+       print(ret)
+    if cmd == 'get':
+       return ret
 
 # ### main worker
 def fble_write(addr, data1, data2=''):
     global vglob_list
     global vglob
     global vwork
+    ### generate page
+    #print('make page')
+    global webpagemain
+    webpagemain = web_page()
     # ### main loop
     # ### try connection 20 times, if succesful stop the loop
     for iii in range(10):
@@ -198,7 +210,7 @@ def fble_irq(event, data):
         # if vglob['addr'] != '' and vglob['result'] == 4:
         # ### if connection or writing not succesful, then re-add
         if msg_out != '':
-            print('=== msg ===', msg_out)
+            #print('=== msg ===', msg_out)
             mqtth.publish(topic_out, bytes(msg_out, 'ascii'))
         # ### if res 8, error, then add work again
         if vglob['result'] == 8:
@@ -279,6 +291,8 @@ def fwork(var):
         # ### get work and address
         workaddr = list(vwork.keys())[0]
         work = vwork.pop(workaddr)
+        ### generate page
+        webpagemain = web_page()
         # ### tests
         if len(work) == 0:
             return
@@ -302,8 +316,9 @@ def fwork(var):
                 worka.append('')
         # "offsetTemp":"-3.0", "valve":"79% open",
         # "mode":"manual","boost":"inactive","window":"closed","state":"unlocked","battery":"GOOD"}
+        ### start thread
         _thread.start_new_thread(fble_write, (workaddr, worka[0], worka[1]))
-    return
+    #return
 
 
 def fmqtt_irq(topic, msg, aaa=False, bbb=False):
@@ -341,7 +356,7 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False):
     # ### otherwise, bad message, syntax, etc
     else:
         print('bad message')
-    return
+    #return
 
 def fclean(var):
     # ### yes, cleaning
@@ -351,14 +366,137 @@ def fclean(var):
     for iii in vglob_list.items():
         if time.time() - iii[1][3] > 7200:
            vglob_list.pop(iii[0])
-    # ### when no job done in last 20 mintes, then clean job variable
+    # ### when no job done in last 20 mintes, then clean job variable and reconnect mqtt
     if time.time() - vglob['time'] > 1200:
         vglob['time'] = time.time()
         vglob['status'] = 8
         vglob['result'] = 0
         vglob['addr'] = ''
         vglob['work'] = ''
+        mqtth.reconnect()
+        mqtth.resubscribe()
     gc.collect()
+
+#-###
+#-###
+#-### webpage generating function
+def web_page():
+  html_in = ""
+  #generate table
+
+  #generate rest of html
+  html = """<!DOCTYPE html>
+<html lang="en" xml:lang="en">
+<head>
+<title>EQ3 controller</title>
+<meta content="width=device-width, initial-scale=0.8" name="viewport" />
+<meta http-equiv="Cache-Control" content="no-store" />
+<meta http-equiv="pragma" content="no-cache" />
+</head>
+<body>
+<h1>EQ3 controller</h1>
+By Dr. JJ on ESP32 and micropython.
+<h2>Work</h2>
+Last: """ + str( vglob ) + """
+<h2>System</h2>
+Update: """ + str( time.time() ) + """<br/>
+Boot: """ + str( uptime ) + """<br/>
+Location: """ + str( config2['mqtt_usr'] ) +"""<br/>
+IP: """ + str( station.ifconfig()[0] ) +"""<br/>
+Links: <a href="/hits.txt">Hits</a>, <a href="/countsnh">Counts hourly</a>, <a href="/countsnd">Counts daily</a>, <a href="/reset">Reset</a>
+<h2>List</h2>
+<pre>
+""" + str( fprint('get') ) + """
+</pre>
+<h2>Graph (hourly consumption)</h2>
+<div style="width: 600px; height: 500px;"><canvas id="jschart"></canvas></div>
+</body>
+</html>"""
+  return( html )
+
+#-###
+#-###
+#-### webpage socket loop function
+def loop_web():
+  ### creating sockets etc
+  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+  #SO_REUSEPORT, whatever this is good for ?
+  # from 300 to 60
+  s.settimeout(120)
+  #s.setblocking(1) # works with both
+  s.bind(('', 80))
+  # how many connections in parallel
+  s.listen(10)
+  ###
+  webpage = ""
+  while config2['loop']:
+    # try to listen for connection
+    try:
+      conn, addr = s.accept()
+      timer1 = time.ticks_ms()
+      conn.settimeout(20)
+      # this is fast
+      # find for requests was VERY slow
+      request = conn.recv(64).decode().split('\r')[0][5:-9] #[4:-6]
+      #print(request)
+      timer2 = time.ticks_ms()
+      ###
+      if request == "":
+         webpage = webpagemain
+         header = """HTTP/1.1 200 OK
+Content-Type: text/html
+Server-Timing: text;dur=""" + str( time.ticks_ms() - timer2 ) + """, req;dur=""" + str( timer2 - timer1 ) + """
+Content-Length: """ + str( len(webpage) ) + """
+Connection: close
+"""
+         conn.sendall( header + "\r\n" + webpage )
+         #continue
+      ###
+      elif request == "reset":
+         header = """HTTP/1.1 302 Found
+Content-Length: 0
+Location: /
+Connection: close
+
+"""
+         # Connection: close
+         conn.sendall( header )
+         #conn.close()
+         #time.sleep(2) # no sleep here ;)
+         machine.reset()
+      ###
+      else:
+         header = """HTTP/1.0 404 Not Found
+Content-Type: text/plain
+Content-Length: 23
+Server-Timing: text;dur=""" + str( time.ticks_ms() - timer2 ) + """, req;dur=""" + str( timer2 - timer1 ) + """
+Connection: close
+
+404 No page like this.
+"""
+         conn.sendall( header )
+         #conn.close()
+      ### END IF
+      #conn.close() # close or not ?
+      # whatever
+    except Exception as e:
+      print( 'Just web loop info:', e )
+      pass
+    ### END TRY
+    # cleaning up
+    header = ""
+    webpage = ""
+    #webpagel = ""
+    gc.collect()
+  ### END WHILE
+  # the function ends if loop fails
+  # so this is not good
+  # maybe reboot here ?
+  sleep(120) # first wait 2 minutes, just in case
+  if keep_loop:
+     machine.reset()
+
 
 # ### connect interrupts
 ble.irq(fble_irq)
@@ -370,8 +508,9 @@ mqtth.connect()
 mqtth.subscribe(config2['mqtt_eq3_in'])
 #mqtth.keepalive = 1
 
+webpagemain = web_page()
 # ### threads
-#loopwebthread = _thread.start_new_thread(loop_web, ())
+loopwebthread = _thread.start_new_thread(loop_web, ())
 
 # ### timers
 # ### scan every 10 minutes
@@ -382,6 +521,7 @@ timer_work.init(period=(5 * 1000), callback=fwork)
 timer_clean.init(period=(1 * 60 * 60 * 1000), callback=fclean)
 
 # ### first scan
+
 fble_scan(0)
 
 #-###
