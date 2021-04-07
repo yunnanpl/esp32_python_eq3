@@ -29,7 +29,7 @@ It is possible to connect to shell of MicroPython for some extra functionality.
 For this, it is reasonable to setup and use WebREPL, to issue commands and upgrade scripts remotely.
 http://micropython.org/webrepl/
 
-There are internal functions:
+There are internal functions (not really necessary, as there is a webpage now):
  - fprint()
    - to cleanly print all visible clients (if not visible, removed after 2 hours)
  - fclean()
@@ -51,11 +51,12 @@ and variables:
    - work list, it is usually empty
 
 ## Features (and anti-features)
- - NO webpage
+ - NEW basic webpage added
  - NO AP configuration (only config file)
  - robust WIFI, survives disconnections, reconnects, etc.
  - robust BLE, survives bad addresses, bad messages, disconnections, etc. Has automatic connections cleaning.
  - robust MQTT, survives disconnections, automatically resubscribes, etc.
+   - more robust mqtt, as there were issues that mqtt-robust lib, have not noticed that it was not subscribed
  - has "unique" worklist
    - if the same message will be sent 5 times, it will be processed once
    - if there is a not-yet-processed work in the list for setting temp, then another work for the same device overwrites previous command
@@ -63,7 +64,6 @@ and variables:
    
 ## Plan
  - add basic AP for configuration
- - add basic status and control webpage
  - add other temperature sensors like Mijia, BME280, etc.
  - add PID regulator for automatic temperature regulation
    - in case of real temperature input
