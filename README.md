@@ -78,6 +78,9 @@ and variables:
  - add white-list and black-list to enforce or ignore some devices
  - maybe - add temperature history and eq3 setting history graph
 
+# Changes
+ + added basic webpage
+
 # References
 
  - mqtt - most robust library chosen
