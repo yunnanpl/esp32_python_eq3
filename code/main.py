@@ -1,7 +1,11 @@
-# ### v 0.21
+# ### v 0.24
 
 # whitelist here
 # blacklist here
+
+# cleaning up names
+#re.sub('\s\W+', '', aaa)
+#re.sub('(\W|\-)+', '', list(vglob_list.values())[7][2])
 
 # get uptime (time.ticks_ms()/1000/60/60/24)
 # or set time.time() as a boot time
@@ -27,41 +31,11 @@ vwork = OrderedDict()
 # random.choice([1,2,3])
 
 # ### define results
-_IRQ_CENTRAL_CONNECT = const(1)
-_IRQ_CENTRAL_DISCONNECT = const(2)
-_IRQ_GATTS_WRITE = const(3)
-_IRQ_GATTS_READ_REQUEST = const(4)
-_IRQ_SCAN_RESULT = const(5)
-_IRQ_SCAN_DONE = const(6)
-_IRQ_PERIPHERAL_CONNECT = const(7)
-_IRQ_PERIPHERAL_DISCONNECT = const(8)
-_IRQ_GATTC_SERVICE_RESULT = const(9)
-_IRQ_GATTC_SERVICE_DONE = const(10)
-_IRQ_GATTC_CHARACTERISTIC_RESULT = const(11)
-_IRQ_GATTC_CHARACTERISTIC_DONE = const(12)
-_IRQ_GATTC_DESCRIPTOR_RESULT = const(13)
-_IRQ_GATTC_DESCRIPTOR_DONE = const(14)
-_IRQ_GATTC_READ_RESULT = const(15)
-_IRQ_GATTC_READ_DONE = const(16)
-_IRQ_GATTC_WRITE_DONE = const(17)
-_IRQ_GATTC_NOTIFY = const(18)
-_IRQ_GATTC_INDICATE = const(19)
-_IRQ_GATTS_INDICATE_DONE = const(20)
-_IRQ_MTU_EXCHANGED = const(21)
-_IRQ_L2CAP_ACCEPT = const(22)
-_IRQ_L2CAP_CONNECT = const(23)
-_IRQ_L2CAP_DISCONNECT = const(24)
-_IRQ_L2CAP_RECV = const(25)
-_IRQ_L2CAP_SEND_READY = const(26)
-_IRQ_CONNECTION_UPDATE = const(27)
-_IRQ_ENCRYPTION_UPDATE = const(28)
-_IRQ_GET_SECRET = const(29)
-_IRQ_SET_SECRET = const(30)
+# removed
 
 # ### definitions
 
 # ### decode addres in a readable format
-
 
 def fdecode_addr(addr):
     result = []
@@ -89,10 +63,6 @@ def fble_write(addr, data1, data2=''):
     global vglob_list
     global vglob
     global vwork
-    ### generate page
-    #print('make page')
-    global webpagemain
-    webpagemain = web_page()
     # ### main loop
     # ### try connection 20 times, if succesful stop the loop
     for iii in range(10):
@@ -153,7 +123,7 @@ def fble_write(addr, data1, data2=''):
             # ### if status 18, success write and response, then break the loo and disconnect
             # ### here, work from work list can be removed
             break
-            # return
+            ### return
         # ### this will happen, if non of the above
         # ###
     # ### if loop ended or break then try to disconnect, set status to disconnected
@@ -163,34 +133,35 @@ def fble_write(addr, data1, data2=''):
         vglob['status'] == 8
 
 # ### main function to handle irqs from mqtt
-
-
 def fble_irq(event, data):
     global vglob_list
     global vglob
+    global webpagemain
     #global vmijia_data
     # ### get event variable and publish global so other threads react as needed
     vglob['status'] = event
     #if event == 17: # 17
     #    print('--', event, '--', vglob['addr'])
     # ###
-    if event == _IRQ_SCAN_RESULT:
+    if event == 5: #_IRQ_SCAN_RESULT
         # ### scan results, and publish gathered addresses in vglob_list
         addr_type, addr, adv_type, rssi, adv_data = data
         vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes(adv_data)[2:14], time.time()]
-    elif event == _IRQ_SCAN_DONE:
+    elif event == 6: #_IRQ_SCAN_DONE
+        webpagemain = web_page()
         # ### scan done and cleanup, reseting variables as needed
         vglob['status'] = 8
         vglob['result'] = 0
         gc.collect()
-    elif event == _IRQ_PERIPHERAL_CONNECT:
+    elif event == 7: #_IRQ_PERIPHERAL_CONNECT
         # ### connected 7
         vglob['handle'], addr_type, addr = data
         #vglob['addr'] = str(fdecode_addr(addr))
         #vmijia_data = [0, 0]
         vglob['result'] = 2
         vglob_list[vglob['addr']][3] = time.time()
-    elif event == _IRQ_PERIPHERAL_DISCONNECT:
+    elif event == 8: #_IRQ_PERIPHERAL_DISCONNECT
+        webpagemain = web_page()
         # ### disconnected 8, do actions
         # for mijia
         msg_out = ''
@@ -229,11 +200,11 @@ def fble_irq(event, data):
         vglob['handle'] = ''
         #vglob['addr'] = ''
         #vglob['work'] = ''
-    elif event == _IRQ_GATTC_WRITE_DONE:
+    elif event == 17: #17 _IRQ_GATTC_WRITE_DONE
         # ### write to device
         vglob['handle'], value_handle, status = data
         vglob['result'] = 4
-    elif event == _IRQ_GATTC_NOTIFY:
+    elif event == 18: #_IRQ_GATTC_NOTIFY
         # ### getting ble notification irq
         vglob['handle'], value_handle, notify_data = data
         # ### for mijia
@@ -251,6 +222,7 @@ def fble_irq(event, data):
         vglob['result'] = 6
     else:
         print('else')
+    gc.collect()
     return
 
 
@@ -274,12 +246,14 @@ def fwork(var):
     global vglob
     #global vwork
     global vwork
+    #global webpagemain
     # ### fix the connection if needed
     # ### wlan fixes itself
     if mqtth.is_conn_issue():
        # ### reconnect
        if mqtth.reconnect():
           mqtth.resubscribe()
+       # stop function
        return
     # ### trigger checking for messages, and wait for messages to arrive
     mqtth.check_msg()
@@ -292,9 +266,10 @@ def fwork(var):
         workaddr = list(vwork.keys())[0]
         work = vwork.pop(workaddr)
         ### generate page
-        webpagemain = web_page()
+        #webpagemain = web_page()
         # ### tests
         if len(work) == 0:
+            # stop function
             return
         elif work == 'scan':
             fble_scan(0)
@@ -318,7 +293,8 @@ def fwork(var):
         # "mode":"manual","boost":"inactive","window":"closed","state":"unlocked","battery":"GOOD"}
         ### start thread
         _thread.start_new_thread(fble_write, (workaddr, worka[0], worka[1]))
-    #return
+    gc.collect()
+    return
 
 
 def fmqtt_irq(topic, msg, aaa=False, bbb=False):
@@ -356,7 +332,7 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False):
     # ### otherwise, bad message, syntax, etc
     else:
         print('bad message')
-    #return
+    return
 
 def fclean(var):
     # ### yes, cleaning
@@ -403,7 +379,7 @@ Update: """ + str( time.time() ) + """<br/>
 Boot: """ + str( uptime ) + """<br/>
 Location: """ + str( config2['mqtt_usr'] ) +"""<br/>
 IP: """ + str( station.ifconfig()[0] ) +"""<br/>
-Links: <a href="/hits.txt">Hits</a>, <a href="/countsnh">Counts hourly</a>, <a href="/countsnd">Counts daily</a>, <a href="/reset">Reset</a>
+Links: <a href="/hits.txt">Hits</a>, <a href="/countsnd">Counts daily</a>, <a href="/reset">Reset</a>
 <h2>List</h2>
 <pre>
 """ + str( fprint('get') ) + """
@@ -428,7 +404,7 @@ def loop_web():
   # how many connections in parallel
   s.listen(10)
   ###
-  webpage = ""
+  #webpage = ""
   while config2['loop']:
     # try to listen for connection
     try:
@@ -442,14 +418,14 @@ def loop_web():
       timer2 = time.ticks_ms()
       ###
       if request == "":
-         webpage = webpagemain
+         #webpage = webpagemain
          header = """HTTP/1.1 200 OK
 Content-Type: text/html
 Server-Timing: text;dur=""" + str( time.ticks_ms() - timer2 ) + """, req;dur=""" + str( timer2 - timer1 ) + """
-Content-Length: """ + str( len(webpage) ) + """
+Content-Length: """ + str( len(webpagemain) ) + """
 Connection: close
 """
-         conn.sendall( header + "\r\n" + webpage )
+         conn.sendall( header + "\r\n" + webpagemain )
          #continue
       ###
       elif request == "reset":
@@ -485,7 +461,7 @@ Connection: close
     ### END TRY
     # cleaning up
     header = ""
-    webpage = ""
+    #webpagemain = ""
     #webpagel = ""
     gc.collect()
   ### END WHILE

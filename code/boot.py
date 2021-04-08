@@ -11,7 +11,7 @@ from secret_cfg import *
 import machine
 machine.freq( config['freq'] )
 #from machine import Pin, DAC, PWM, ADC, SoftI2C
-from machine import Pin
+#from machine import Pin
 import network
 import ntptime
 import time
