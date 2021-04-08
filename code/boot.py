@@ -23,6 +23,7 @@ import socket
 #import umqtt
 import robust2 as umqtt
 from collections import OrderedDict
+import re
 
 gc.enable()
 

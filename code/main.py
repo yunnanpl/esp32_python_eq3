@@ -50,9 +50,9 @@ def fprint(cmd='show'):
     global vglob_list
     ret = ""
     for iii in vglob_list.items():
-       if cmd == 'clean' and time.time() - iii[1][3] > 7200:
+       if cmd == 'clean' and time.time() - iii[1][3] > 60*60: # now 1 hour instead of 2
           vglob_list.pop(iii[0])
-       ret += str(iii[0])+" "+ str(time.time() - iii[1][3]) +" "+ str(iii[1][1]) +" "+ str(iii[1][2]) +"\n"
+       ret += str(iii[0])+" "+ '{: >{w}}'.format(str(time.time() - iii[1][3]), w=5) +" "+ str(iii[1][1]) +" "+ str(iii[1][2]) +"\n"
     if cmd == 'show':
        print(ret)
     if cmd == 'get':
@@ -146,7 +146,8 @@ def fble_irq(event, data):
     if event == 5: #_IRQ_SCAN_RESULT
         # ### scan results, and publish gathered addresses in vglob_list
         addr_type, addr, adv_type, rssi, adv_data = data
-        vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes(adv_data)[2:14], time.time()]
+        #vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes(adv_data)[2:14], time.time()]
+        vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, re.sub('(\\\\x..|\ )', '', str(bytes(adv_data)[2:20])), time.time()]
     elif event == 6: #_IRQ_SCAN_DONE
         webpagemain = web_page()
         # ### scan done and cleanup, reseting variables as needed
@@ -357,7 +358,7 @@ def fclean(var):
 #-###
 #-### webpage generating function
 def web_page():
-  html_in = ""
+  #html_in = ""
   #generate table
 
   #generate rest of html
