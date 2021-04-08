@@ -80,6 +80,10 @@ and variables:
 
 # Changes
  + added basic webpage
+ + fixed memory overrun due to webpage generation
+ + saved memory where I could
+ + precompiled the external libraries to save memory and space (simple2.py and robust2.py)
+   + not sure if those are really necessry, as the "unsubscription" error happened and no error was raised 
 
 # References
 
