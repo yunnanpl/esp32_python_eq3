@@ -35,8 +35,25 @@ vwork = OrderedDict()
 
 # ### definitions
 
-# ### decode addres in a readable format
+#def localtime(  ):
 
+def now(nowtime = "", ttt = "s"):
+    # typing time.time in default value does not work
+    if nowtime == "":
+       nowtime = time.time()
+    #nowtime = str(time.time()),
+    localtime = time.gmtime( int(nowtime)+3600 ) # +1H
+    #return(cet)
+    if ttt == "m":
+        return "{0:04d}-{1:02d}-{2:02d}".format( *localtime ) + " {3:02d}:{4:02d}".format( *localtime )
+    if ttt == "h":
+        return "{0:04d}-{1:02d}-{2:02d}".format( *localtime ) + " {3:02d}".format( *localtime )
+    if ttt == "d":
+        return "{0:04d}-{1:02d}-{2:02d}".format( *localtime )
+    else:
+        return "{0:04d}-{1:02d}-{2:02d}".format( *localtime ) + " {3:02d}:{4:02d}:{5:02d}".format( *localtime )
+
+# ### decode addres in a readable format
 def fdecode_addr(addr):
     result = []
     for iii in addr:
@@ -50,8 +67,8 @@ def fprint(cmd='show'):
     global vglob_list
     ret = ""
     for iii in vglob_list.items():
-       if cmd == 'clean' and time.time() - iii[1][3] > 60*60: # now 1 hour instead of 2
-          vglob_list.pop(iii[0])
+       #if cmd == 'clean' and time.time() - iii[1][3] > 60*60: # now 1 hour instead of 2
+       #   vglob_list.pop(iii[0])
        ret += str(iii[0])+" "+ '{: >{w}}'.format(str(time.time() - iii[1][3]), w=5) +" "+ str(iii[1][1]) +" "+ str(iii[1][2]) +"\n"
     if cmd == 'show':
        print(ret)
@@ -201,6 +218,7 @@ def fble_irq(event, data):
         vglob['handle'] = ''
         #vglob['addr'] = ''
         #vglob['work'] = ''
+        gc.collect()
     elif event == 17: #17 _IRQ_GATTC_WRITE_DONE
         # ### write to device
         vglob['handle'], value_handle, status = data
@@ -223,7 +241,6 @@ def fble_irq(event, data):
         vglob['result'] = 6
     else:
         print('else')
-    gc.collect()
     return
 
 
@@ -236,9 +253,11 @@ def fble_scan(var):
     # ### starting scans in thread, not to block console, etc.
     #ble.gap_scan(10000, 40000, 20000, 1)
     if str(var) == '0':
-        _thread.start_new_thread(ble.gap_scan, (40000, 30000, 30000, 1))
+       # 40 seconds as a full scan is more than necessary
+       _thread.start_new_thread(ble.gap_scan, (40*1000, 30000, 30000, 1))
     else:
-        _thread.start_new_thread(ble.gap_scan, (15000, 30000, 30000, 1))
+       # was 15 seconds, is 20
+       _thread.start_new_thread(ble.gap_scan, (20*1000, 30000, 30000, 1))
     return
 
 
@@ -339,12 +358,12 @@ def fclean(var):
     # ### yes, cleaning
     global vglob
     global vglob_list
-    # ### remove addresses older than 2 hours
+    # ### remove addresses older than 1 hour (was 2 hours)
     for iii in vglob_list.items():
-        if time.time() - iii[1][3] > 7200:
+        if time.time() - iii[1][3] > 60*60*1:
            vglob_list.pop(iii[0])
     # ### when no job done in last 20 mintes, then clean job variable and reconnect mqtt
-    if time.time() - vglob['time'] > 1200:
+    if time.time() - vglob['time'] > 20*60:
         vglob['time'] = time.time()
         vglob['status'] = 8
         vglob['result'] = 0
@@ -360,7 +379,7 @@ def fclean(var):
 def web_page():
   #html_in = ""
   #generate table
-
+  #vglob['time']
   #generate rest of html
   html = """<!DOCTYPE html>
 <html lang="en" xml:lang="en">
@@ -374,10 +393,10 @@ def web_page():
 <h1>EQ3 controller</h1>
 By Dr. JJ on ESP32 and micropython.
 <h2>Work</h2>
-Last: """ + str( vglob ) + """
+Last: """ + str( vglob ) + """ on """ + str( now(vglob['time']) ) + """
 <h2>System</h2>
-Update: """ + str( time.time() ) + """<br/>
-Boot: """ + str( uptime ) + """<br/>
+Update: """ + str( now() ) + """<br/>
+Boot: """ + str( now(uptime) ) + """<br/>
 Location: """ + str( config2['mqtt_usr'] ) +"""<br/>
 IP: """ + str( station.ifconfig()[0] ) +"""<br/>
 Links: <a href="/hits.txt">Hits</a>, <a href="/countsnd">Counts daily</a>, <a href="/reset">Reset</a>
@@ -493,8 +512,8 @@ loopwebthread = _thread.start_new_thread(loop_web, ())
 timer_scan.init(period=(10 * 60 * 1000), callback=fble_scan)
 # ### work every 10 seconds
 timer_work.init(period=(5 * 1000), callback=fwork)
-# ### clean every 1 hour
-timer_clean.init(period=(1 * 60 * 60 * 1000), callback=fclean)
+# ### clean every 50 minutes
+timer_clean.init(period=(1 * 50 * 60 * 1000), callback=fclean)
 
 # ### first scan
 
