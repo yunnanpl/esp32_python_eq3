@@ -83,7 +83,9 @@ and variables:
  + fixed memory overrun due to webpage generation
  + saved memory where I could
  + precompiled the external libraries to save memory and space (simple2.py and robust2.py)
-   + not sure if those are really necessry, as the "unsubscription" error happened and no error was raised 
+   + not sure if those are really necessry, as the "unsubscription" error happened and no error was raised
+ + cleaned up BLE names (still, maybe due to transmission issues, some look unusual)
+ + removing unseen devices after 1 hour (and not 2 hours as before) (every 10 minutes the device is scanning for new BLE) 
 
 # References
 
