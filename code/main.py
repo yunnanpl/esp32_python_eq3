@@ -403,14 +403,19 @@ By Dr. JJ on ESP32 and micropython.
 <h2>Work</h2>
 Last: """ + str(vglob) + """ on """ + str(now(vglob['time'])) + """
 <h2>System</h2>
-Update: """ + str(now()) + """<br/>
+Last change: """ + str(now()) + """<br/>
 Boot: """ + str(now(uptime)) + """<br/>
 Location: """ + str(config2['mqtt_usr']) + """<br/>
-IP: """ + str(station.ifconfig()[0]) + """<br/>
-Links: <a href="/list">List of devices</a>, <a href="/ota">OTA update</a>, <a href="/config">Config</a>, <a href="/reset">Reset</a>
+IP: """ + str(station.ifconfig()[0]) + """
+<h2>Links:</h2>
+<a href="/list">List of devices</a><br/>
+<a href="/ota">OTA update</a><br/>
+<a href="/config">Config</a><br/>
+<a href="/webrepl">Add webrepl</a> (pass: 1234) - <a href="http://micropython.org/webrepl/#""" +str(station.ifconfig()[0])+ """:8266/">Webrepl console</a><br/>
+<a href="/reset">Reset</a>
 <h2>List</h2>
 <pre>
-""" + str("list") + """
+""" + str("place for list of used devices") + """
 </pre>
 <h2>Other</h2>
 </body>
@@ -430,7 +435,7 @@ def loop_web():
     # from 300 to 60
     s.settimeout(120)
     # s.setblocking(1) # works with both
-    s.setblocking(1)
+    #s.setblocking(1)
     s.bind(('', 80))
     # how many connections in parallel
     s.listen(10)
@@ -472,13 +477,14 @@ Connection: close
 """
                 conn.sendall(header + "\r\n" + webpagea)
             elif request == "/config":
-
                 if requestval != "":
                     try:
                         os.remove(requestval)
                     except:
                         pass
-                webpagea = str(requestval) + "\n" + str(os.listdir())
+                webpagea = "File listing on ESP. By adding ? and filename, files can be removed (dangerous).\nFiles with _old are safety copies after OTA.\n"
+                webpagea += str(requestval) + "\n" + str(os.listdir()) + "\n\n"
+                webpagea += "Free RAM (over 50k is fine): "+ str(gc.mem_free()) + "\n"
                 header = """HTTP/1.1 200 OK
 Content-Type: text/plain
 Content-Length: """ + str(len(webpagea)) + """
@@ -506,7 +512,7 @@ Done, now <a href="/reset">Reset</a>.
             elif request == "/ota":
                 # method="post"
                 webpagea = """Usually upload main.py file. Sometimes boot.py file. Binary files do not work yet.<br/>
-<form action="otaup" name="upload" method="post" enctype="multipart/form-data">
+<form action="otado" name="upload" method="post" enctype="multipart/form-data">
   <input type="file" name="filename">
   <input type="submit">
 </form>"""
@@ -516,7 +522,7 @@ Content-Length: """ + str(len(webpagea)) + """
 Connection: close
 """
                 conn.sendall(header + "\r\n" + webpagea)
-            elif request == "/otaup":
+            elif request == "/otado":
                 webpagea = ""
                 gc.collect()
                 # s.setblocking(0)
