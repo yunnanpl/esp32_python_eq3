@@ -79,6 +79,13 @@ and variables:
  - maybe - add temperature history and eq3 setting history graph
 
 # Changes
+ - new
+ + added basic OTA !!!
+   + files can be uploaded and removed from ESP through the page (will be documented soon)
+   + works for any text file, does not work for binary files yet...
+ + removed necessity of webrepl to save memory
+   + webrepl can be switched on and off through the webpage
+ - old 
  + added basic webpage
  + fixed memory overrun due to webpage generation
  + saved memory where I could
