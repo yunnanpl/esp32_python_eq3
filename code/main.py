@@ -410,7 +410,7 @@ IP: """ + str(station.ifconfig()[0]) + """
 <h2>Links:</h2>
 <a href="/list">List of devices</a><br/>
 <a href="/ota">OTA update</a><br/>
-<a href="/config">Config</a><br/>
+<a href="/info">Config</a><br/>
 <a href="/webrepl">Add webrepl</a> (pass: 1234) - <a href="http://micropython.org/webrepl/#""" +str(station.ifconfig()[0])+ """:8266/">Webrepl console</a><br/>
 <a href="/reset">Reset</a>
 <h2>List</h2>
@@ -435,10 +435,10 @@ def loop_web():
     # from 300 to 60
     s.settimeout(120)
     # s.setblocking(1) # works with both
-    #s.setblocking(1)
+    s.setblocking(1)
     s.bind(('', 80))
     # how many connections in parallel
-    s.listen(10)
+    s.listen(5)
     ###
     #webpage = ""
     while config2['loop']:
@@ -446,7 +446,8 @@ def loop_web():
         try:
             conn, addr = s.accept()
             timer1 = time.ticks_ms()
-            conn.settimeout(20)
+            # this is maybe not needed ?
+            #conn.settimeout(10)
             # this is fast
             # find for requests was VERY slow
             #requestfull = conn.recv(64).decode()  # [4:-6]
@@ -469,28 +470,44 @@ Connection: close
                 # continue
             ###
             elif request == "/list":
-                webpagea = str(fprint('get'))
+                webpagea = "MAC, last seen, rssi, name\n" + str(fprint('get'))
                 header = """HTTP/1.1 200 OK
 Content-Type: text/plain
 Content-Length: """ + str(len(webpagea)) + """
 Connection: close
 """
                 conn.sendall(header + "\r\n" + webpagea)
-            elif request == "/config":
+                #conn.close()
+            elif request == "/deldo":
+                header = """HTTP/1.1 302 Found
+Content-Length: 0
+Location: /info
+Connection: close
+
+"""
+                # Connection: close
                 if requestval != "":
                     try:
                         os.remove(requestval)
                     except:
                         pass
-                webpagea = "File listing on ESP. By adding ? and filename, files can be removed (dangerous).\nFiles with _old are safety copies after OTA.\n"
-                webpagea += str(requestval) + "\n" + str(os.listdir()) + "\n\n"
-                webpagea += "Free RAM (over 50k is fine): "+ str(gc.mem_free()) + "\n"
+                conn.sendall(header)
+            elif request == "/info":
+                webpagea = """Directory listing on ESP. By writing /deldo?filename, files can be removed (dangerous).
+Files with _old are safety copies after OTA, can be safely removed.
+To disable webrepl, delete webrepl_cfg.py and reboot device.
+
+""" + str(os.listdir()) + """
+
+Free RAM (over 40k is fine, 80k is good): """ + str(gc.mem_free()) + """."""
+
                 header = """HTTP/1.1 200 OK
 Content-Type: text/plain
 Content-Length: """ + str(len(webpagea)) + """
 Connection: close
 """
                 conn.sendall(header + "\r\n" + webpagea)
+                #conn.close()
             elif request == "/webrepl":
                 #requestval = requestfull.split('\r')[0].split(' ')[1].split('?')[1]
                 #webpagea = str(requestval) + "\n" + str(os.listdir())
@@ -500,18 +517,18 @@ Connection: close
                     fff.close()
                 except:
                     pass
-                header = """HTTP/1.1 200 OK
-Content-Type: text/html
-Content-Length: 37
+                header = """HTTP/1.1 302 Found
+Content-Length: 0
+Location: /reset
 Connection: close
 
-Done, now <a href="/reset">Reset</a>.
 """
                 conn.sendall(header + "\r\n" + webpagea)
                 #machine.reset()
             elif request == "/ota":
                 # method="post"
-                webpagea = """Usually upload main.py file. Sometimes boot.py file. Binary files do not work yet.<br/>
+                webpagea = """<pre>Usually upload main.py file. Sometimes boot.py file. Binary files do not work yet.</pre>
+<br/>
 <form action="otado" name="upload" method="post" enctype="multipart/form-data">
   <input type="file" name="filename">
   <input type="submit">
@@ -526,12 +543,11 @@ Connection: close
                 webpagea = ""
                 gc.collect()
                 # s.setblocking(0)
-                header = """HTTP/1.1 200 OK
-Content-Type: text/html
-Content-Length: 37
+                header = """HTTP/1.1 302 Found
+Content-Length: 0
+Location: /reset
 Connection: close
 
-Done, now <a href="/reset">Reset</a>.
 """
                 # =
                 headerin = conn.recv(500).decode()
@@ -573,7 +589,7 @@ Done, now <a href="/reset">Reset</a>.
                         #print( "= last" )
                         # last
                         conn.sendall(header)
-                        conn.close()
+                        #conn.close()
                         fff.write(dataaa[0])
                         # done with success
                         begin = 3
@@ -596,10 +612,23 @@ Done, now <a href="/reset">Reset</a>.
                 dataaa = ""
                 # gc.collect()
             elif request == "/reset":
+                header = """HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 34
+Connection: close
+
+Do <a href="/resetdo">reset</a> ?
+"""
+                # Connection: close
+                conn.sendall(header)
+                # conn.close()
+                # time.sleep(2) # no sleep here ;)
+            elif request == "/resetdo":
                 header = """HTTP/1.1 302 Found
 Content-Length: 0
 Location: /
 Connection: close
+
 
 """
                 # Connection: close
@@ -623,7 +652,8 @@ Connection: close
             # conn.close() # close or not ?
             # whatever
         except Exception as e:
-            print('Just web loop info:', e)
+            #print('Just web loop info:', e)
+            # timeout message hidden
             pass
         # END TRY
         # cleaning up
