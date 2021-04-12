@@ -80,19 +80,22 @@ and variables:
 
 # Changes
  - new
- + added basic OTA !!!
-   + files can be uploaded and removed from ESP through the page (will be documented soon)
-   + works for any text file, does not work for binary files yet...
- + removed necessity of webrepl to save memory
-   + webrepl can be switched on and off through the webpage
+   + added basic OTA !!!
+     + files can be uploaded and removed from ESP through the page (will be documented soon)
+     + works for any text file, does not work for binary files yet...
+   + removed necessity of webrepl to save memory
+     + webrepl can be switched on and off through the webpage
+   + improved web/sessions - more responsive
+   + improved links (upload and reset requires confirmation)
+   + added more clear descriptions
  - old 
- + added basic webpage
- + fixed memory overrun due to webpage generation
- + saved memory where I could
- + precompiled the external libraries to save memory and space (simple2.py and robust2.py)
-   + not sure if those are really necessry, as the "unsubscription" error happened and no error was raised
- + cleaned up BLE names (still, maybe due to transmission issues, some look unusual)
- + removing unseen devices after 1 hour (and not 2 hours as before) (every 10 minutes the device is scanning for new BLE) 
+   + added basic webpage
+   + fixed memory overrun due to webpage generation
+   + saved memory where I could
+   + precompiled the external libraries to save memory and space (simple2.py and robust2.py)
+     + not sure if those are really necessry, as the "unsubscription" error happened and no error was raised
+   + cleaned up BLE names (still, maybe due to transmission issues, some look unusual)
+   + removing unseen devices after 1 hour (and not 2 hours as before) (every 10 minutes the device is scanning for new BLE) 
 
 # References
 
