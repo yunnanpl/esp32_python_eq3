@@ -6,6 +6,7 @@
 # cleaning up names
 #re.sub('\s\W+', '', aaa)
 #re.sub('(\W|\-)+', '', list(vglob_list.values())[7][2])
+#bytes((x for x in a if x >= 0x20 and x < 127))
 
 # get uptime (time.ticks_ms()/1000/60/60/24)
 # or set time.time() as a boot time
@@ -24,6 +25,8 @@ vglob['time'] = time.time()
 vglob_list = {}
 # ### work list
 vwork = OrderedDict()
+
+vwork_status = {}
 # ### data
 #vmijia_data = [0, 0]
 
@@ -38,7 +41,7 @@ vwork = OrderedDict()
 # def localtime(  ):
 
 
-def now(nowtime="", ttt="s"):
+def fnow(nowtime="", ttt="s"):
     # typing time.time in default value does not work
     if nowtime == "":
         nowtime = time.time()
@@ -160,7 +163,8 @@ def fble_write(addr, data1, data2=''):
 def fble_irq(event, data):
     global vglob_list
     global vglob
-    global webpagemain
+    global vwebpage
+    global vwork_status
     #global vmijia_data
     # ### get event variable and publish global so other threads react as needed
     vglob['status'] = event
@@ -171,9 +175,10 @@ def fble_irq(event, data):
         # ### scan results, and publish gathered addresses in vglob_list
         addr_type, addr, adv_type, rssi, adv_data = data
         #vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes(adv_data)[2:14], time.time()]
-        vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, re.sub('(\\\\x..|\ )', '', str(bytes(adv_data)[2:20])), time.time()]
+        #re.sub('(\\\\x..|\ )', '', str())
+        vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)), time.time()]
     elif event == 6:  # _IRQ_SCAN_DONE
-        webpagemain = str(web_page())
+        vwebpage = fwebpage()
         # ### scan done and cleanup, reseting variables as needed
         vglob['status'] = 8
         vglob['result'] = 0
@@ -186,7 +191,6 @@ def fble_irq(event, data):
         vglob['result'] = 2
         vglob_list[vglob['addr']][3] = time.time()
     elif event == 8:  # _IRQ_PERIPHERAL_DISCONNECT
-        webpagemain = str(web_page())
         # ### disconnected 8, do actions
         # for mijia
         msg_out = ''
@@ -208,6 +212,9 @@ def fble_irq(event, data):
         if msg_out != '':
             #print('=== msg ===', msg_out)
             mqtth.publish(topic_out, bytes(msg_out, 'ascii'))
+            vwork_status[vglob['addr']] = msg_out
+            # recache page only if something changed/sent
+            vwebpage = fwebpage()
         # ### if res 8, error, then add work again
         if vglob['result'] == 8:
             vwork[vglob['addr']] = vglob['work']
@@ -273,7 +280,7 @@ def fwork(var):
     global vglob
     #global vwork
     global vwork
-    #global webpagemain
+    #global vwebpage
     # ### fix the connection if needed
     # ### wlan fixes itself
     if mqtth.is_conn_issue():
@@ -342,7 +349,8 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False):
         elif worka[0] == 'reset':
             # reset
             machine.reset()
-            time.sleep(5)
+            # is this necessary ?
+            time.sleep(1)
     # ### if above not true and address not in the list, then skip
     # ### whitelist could be added
     elif worka[0] not in vglob_list.keys():
@@ -358,6 +366,10 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False):
     else:
         print('bad message')
     return
+
+#####
+#####
+#####
 
 
 def fclean(var):
@@ -384,11 +396,14 @@ def fclean(var):
 # -### webpage generating function
 
 
-def web_page():
-    #html_in = ""
+def fwebpage():
+    html_in = ""
+    for vvv in vwork_status.items():
+        html_in += str(vvv) + "\n"
     # generate table
     # vglob['time']
     # generate rest of html
+    #""" + str(vglob) + """
     html = """<!DOCTYPE html>
 <html lang="en" xml:lang="en">
 <head>
@@ -400,27 +415,31 @@ def web_page():
 <body>
 <h1>EQ3 controller</h1>
 By Dr. JJ on ESP32 and micropython.
-<h2>Work</h2>
-Last: """ + str(vglob) + """ on """ + str(now(vglob['time'])) + """
 <h2>System</h2>
-Last change: """ + str(now()) + """<br/>
-Boot: """ + str(now(uptime)) + """<br/>
+Last work done on: """ + str(fnow(vglob['time'])) + """<br/>
+Last change: """ + str(fnow()) + """<br/>
+Boot: """ + str(fnow(uptime)) + """<br/>
 Location: """ + str(config2['mqtt_usr']) + """<br/>
 IP: """ + str(station.ifconfig()[0]) + """
 <h2>Links:</h2>
 <a href="/list">List of devices</a><br/>
-<a href="/ota">OTA update</a><br/>
-<a href="/info">Config</a><br/>
-<a href="/webrepl">Add webrepl</a> (pass: 1234) - <a href="http://micropython.org/webrepl/#""" +str(station.ifconfig()[0])+ """:8266/">Webrepl console</a><br/>
+<a href="/ota">Update OTA</a><br/>
+<a href="/info">System info</a><br/>
+<a href="/webrepl">Add webrepl</a> - <a href="http://micropython.org/webrepl/#""" + str(station.ifconfig()[0]) + """:8266/">Webrepl console</a> (pass: 1234)<br/>
+<br/>
+<a href="/scan">Rescan devices</a><br/>
+<a href="/purge">Remove old devices from list</a><br/>
 <a href="/reset">Reset</a>
-<h2>List</h2>
+<h2>List of contacted devices</h2>
 <pre>
-""" + str("place for list of used devices") + """
+""" + str(html_in) + """
 </pre>
 <h2>Other</h2>
 </body>
 </html>"""
-    return(html)
+    gc.collect()
+    #returning bytes, does not save memory
+    return( str(html) )
 
 #-###
 #-###
@@ -438,7 +457,7 @@ def loop_web():
     s.setblocking(1)
     s.bind(('', 80))
     # how many connections in parallel
-    s.listen(5)
+    s.listen(4)
     ###
     #webpage = ""
     while config2['loop']:
@@ -447,10 +466,10 @@ def loop_web():
             conn, addr = s.accept()
             timer1 = time.ticks_ms()
             # this is maybe not needed ?
-            #conn.settimeout(10)
+            # conn.settimeout(10)
             # this is fast
             # find for requests was VERY slow
-            #requestfull = conn.recv(64).decode()  # [4:-6]
+            # requestfull = conn.recv(64).decode()  # [4:-6]
             #request = requestfull.split('\r')[0].split(' ')[1].split('?')[0]
             requestfull = conn.recv(64).decode().split('\r')[0].split(' ')[1].split('?')  # [4:-6]
             request = requestfull[0]
@@ -458,17 +477,19 @@ def loop_web():
             if len(requestfull) == 2:
                 requestval = requestfull[1]
             timer2 = time.ticks_ms()
-            ###
+            #####
+            #####
             if request == "/":
                 header = """HTTP/1.1 200 OK
 Content-Type: text/html
 Server-Timing: text;dur=""" + str(time.ticks_ms() - timer2) + """, req;dur=""" + str(timer2 - timer1) + """
-Content-Length: """ + str(len(webpagemain)) + """
+Content-Length: """ + str( len(vwebpage) ) + """
 Connection: close
 """
-                conn.sendall(header + "\r\n" + webpagemain)
+                conn.sendall(header + "\r\n" + vwebpage)
                 # continue
-            ###
+            #####
+            #####
             elif request == "/list":
                 webpagea = "MAC, last seen, rssi, name\n" + str(fprint('get'))
                 header = """HTTP/1.1 200 OK
@@ -477,7 +498,9 @@ Content-Length: """ + str(len(webpagea)) + """
 Connection: close
 """
                 conn.sendall(header + "\r\n" + webpagea)
-                #conn.close()
+                # conn.close()
+            #####
+            #####
             elif request == "/deldo":
                 header = """HTTP/1.1 302 Found
 Content-Length: 0
@@ -492,14 +515,19 @@ Connection: close
                     except:
                         pass
                 conn.sendall(header)
+            #####
+            #####
             elif request == "/info":
                 webpagea = """Directory listing on ESP. By writing /deldo?filename, files can be removed (dangerous).
 Files with _old are safety copies after OTA, can be safely removed.
 To disable webrepl, delete webrepl_cfg.py and reboot device.
 
-""" + str(os.listdir()) + """
+Dir: """ + str(os.listdir()) + """
 
-Free RAM (over 40k is fine, 80k is good): """ + str(gc.mem_free()) + """."""
+Current work: """ + str(vglob) + """
+Scheduled work: """ + str(vwork) + """
+
+Free RAM (over 40k is fine, 70k is good): """ + str(gc.mem_free()) + """."""
 
                 header = """HTTP/1.1 200 OK
 Content-Type: text/plain
@@ -507,7 +535,9 @@ Content-Length: """ + str(len(webpagea)) + """
 Connection: close
 """
                 conn.sendall(header + "\r\n" + webpagea)
-                #conn.close()
+                # conn.close()
+            #####
+            #####
             elif request == "/webrepl":
                 #requestval = requestfull.split('\r')[0].split(' ')[1].split('?')[1]
                 #webpagea = str(requestval) + "\n" + str(os.listdir())
@@ -524,7 +554,35 @@ Connection: close
 
 """
                 conn.sendall(header + "\r\n" + webpagea)
-                #machine.reset()
+                # machine.reset()
+            #####
+            #####
+            elif request == "/scan":
+                vwork['0'] = 'scan'
+                header = """HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 15
+Connection: close
+
+Scan scheduled.
+"""
+                conn.sendall(header + "\r\n" + webpagea)
+                # machine.reset()
+            #####
+            #####
+            elif request == "/purge":
+                fclean(1)
+                header = """HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 77
+Connection: close
+
+Old devices removed from the list and if necessary the work status was reset.
+"""
+                conn.sendall(header + "\r\n" + webpagea)
+                # machine.reset()
+            #####
+            #####
             elif request == "/ota":
                 # method="post"
                 webpagea = """<pre>Usually upload main.py file. Sometimes boot.py file. Binary files do not work yet.</pre>
@@ -539,6 +597,8 @@ Content-Length: """ + str(len(webpagea)) + """
 Connection: close
 """
                 conn.sendall(header + "\r\n" + webpagea)
+            #####
+            #####
             elif request == "/otado":
                 webpagea = ""
                 gc.collect()
@@ -555,10 +615,14 @@ Connection: close
                 lenin = int(headerin.split("\r\nContent-Length: ", 2)[1].split('\r\n')[0])
                 bufflen = round(lenin / float(str(round(lenin / 4000)) + ".5"))
                 #lenin = 0
-                #print("===")
+                # print("===")
                 #print( headerin )
                 #print( "===" )
                 begin = 0
+                try:
+                    os.remove('upload')
+                except:
+                    pass
                 fff = open('upload', 'wb')
                 while True:
                     dataaa = conn.recv(bufflen).decode().split('\r\n--' + boundaryin, 2)
@@ -589,7 +653,7 @@ Connection: close
                         #print( "= last" )
                         # last
                         conn.sendall(header)
-                        #conn.close()
+                        # conn.close()
                         fff.write(dataaa[0])
                         # done with success
                         begin = 3
@@ -611,6 +675,8 @@ Connection: close
                 #print( lenin )
                 dataaa = ""
                 # gc.collect()
+            #####
+            #####
             elif request == "/reset":
                 header = """HTTP/1.1 200 OK
 Content-Type: text/html
@@ -623,12 +689,13 @@ Do <a href="/resetdo">reset</a> ?
                 conn.sendall(header)
                 # conn.close()
                 # time.sleep(2) # no sleep here ;)
+            #####
+            #####
             elif request == "/resetdo":
                 header = """HTTP/1.1 302 Found
 Content-Length: 0
 Location: /
 Connection: close
-
 
 """
                 # Connection: close
@@ -636,7 +703,8 @@ Connection: close
                 # conn.close()
                 # time.sleep(2) # no sleep here ;)
                 machine.reset()
-            ###
+            #####
+            #####
             else:
                 header = """HTTP/1.0 404 Not Found
 Content-Type: text/plain
@@ -657,18 +725,34 @@ Connection: close
             pass
         # END TRY
         # cleaning up
+        requestfull = ""
         header = ""
-        #webpagemain = ""
-        #webpagel = ""
+        webpagea = ""
+        #vwebpage = ""
         gc.collect()
     # END WHILE
     # the function ends if loop fails
     # so this is not good
     # maybe reboot here ?
-    sleep(120)  # first wait 2 minutes, just in case
+    sleep(60)  # first wait 1 minute, just in case, for webrepl etc
     if keep_loop:
         machine.reset()
 
+
+def
+
+
+####
+
+
+def fschedule(var):
+    fclean(1)
+    # add timers, or last run
+    vwork['0'] = 'scan'
+    # add schedule for eq3 querying
+    # add schedule for mijia querying
+    # add schedule for hardware thermometer testing, but this can be queried every time
+    # split "purging" cleaning and restart work
 
 # ### connect interrupts
 ble.irq(fble_irq)
@@ -680,20 +764,20 @@ mqtth.connect()
 mqtth.subscribe(config2['mqtt_eq3_in'])
 #mqtth.keepalive = 1
 
-webpagemain = str(web_page())
+vwebpage = fwebpage()
 # ### threads
 loopwebthread = _thread.start_new_thread(loop_web, ())
 
 # ### timers
 # ### scan every 10 minutes
-timer_scan.init(period=(10 * 60 * 1000), callback=fble_scan)
+# scan can be added by automatic timer, or mqtt, or web
+timer_schedule.init(period=(10 * 60 * 1000), callback=fschedule)
 # ### work every 10 seconds
 timer_work.init(period=(5 * 1000), callback=fwork)
 # ### clean every 50 minutes
-timer_clean.init(period=(1 * 50 * 60 * 1000), callback=fclean)
+#timer_clean.init(period=(1 * 50 * 60 * 1000), callback=fclean)
 
-# ### first scan
-
+# ### first scan, longer
 fble_scan(0)
 
 #-###

@@ -7,14 +7,17 @@
 #-###
 # -### imports, also config and settings
 import os
-import re
+# substitute with bytes((x for x in a if x >= 0x20 and x < 127))
+#import re
 from collections import OrderedDict
-import robust2 as umqtt
+#import robust2 as umqtt
+import simple2 as umqtt
 import socket
 import _thread
 import gc
 import ubluetooth
-from micropython import const
+# not necessary
+#from micropython import const
 import time
 import ntptime
 import network
@@ -39,7 +42,7 @@ if ble.active() == False:
 #-###
 #-###
 # -### create timers
-timer_scan = machine.Timer(0)
+timer_schedule = machine.Timer(0)
 timer_work = machine.Timer(1)
 timer_clean = machine.Timer(2)
 
