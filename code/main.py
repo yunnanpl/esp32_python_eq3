@@ -438,8 +438,8 @@ IP: """ + str(station.ifconfig()[0]) + """
 </body>
 </html>"""
     gc.collect()
-    #returning bytes, does not save memory
-    return( str(html) )
+    # returning bytes, does not save memory
+    return(str(html))
 
 #-###
 #-###
@@ -483,7 +483,7 @@ def loop_web():
                 header = """HTTP/1.1 200 OK
 Content-Type: text/html
 Server-Timing: text;dur=""" + str(time.ticks_ms() - timer2) + """, req;dur=""" + str(timer2 - timer1) + """
-Content-Length: """ + str( len(vwebpage) ) + """
+Content-Length: """ + str(len(vwebpage)) + """
 Connection: close
 """
                 conn.sendall(header + "\r\n" + vwebpage)
@@ -739,9 +739,12 @@ Connection: close
         machine.reset()
 
 
-def
-
-
+def fmqttdiscovery():
+    print("test")
+    topict = 'homeassistant/sensor/MijiaMACTemp/config'
+    devicet = '{"device_class": "temperature", "name": "MijiaMACTemp", "state_topic": "homeassistant/sensor/sensorMAC/state", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", "uniq_id": "MAC_T", "dev": { "ids": [ "MAC" ] } }'
+    topich = 'homeassistant/sensor/MijiaMACHum/config'
+    topich = '{"device_class": "humidity", "name": "MijiaMACHum", "state_topic": "homeassistant/sensor/sensorMAC/state", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", "uniq_id": "MAC_H" }'
 ####
 
 
@@ -753,6 +756,7 @@ def fschedule(var):
     # add schedule for mijia querying
     # add schedule for hardware thermometer testing, but this can be queried every time
     # split "purging" cleaning and restart work
+
 
 # ### connect interrupts
 ble.irq(fble_irq)
