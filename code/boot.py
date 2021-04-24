@@ -44,7 +44,7 @@ if ble.active() == False:
 # -### create timers
 timer_schedule = machine.Timer(0)
 timer_work = machine.Timer(1)
-timer_clean = machine.Timer(2)
+#timer_clean = machine.Timer(2)
 
 #-###
 #-###

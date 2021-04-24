@@ -145,17 +145,21 @@ def fble_write(addr, data1, data2=''):
             # ### if status 17, written, but not 18, response, then wait
             time.sleep(1)
         elif vglob['status'] == 18:
-            # ### if status 18, success write and response, then break the loo and disconnect
+            # ### if status 18, success write and response, then break the loop and disconnect
             # ### here, work from work list can be removed
             break
             # return
         # ### this will happen, if non of the above
+        # so sleep before next try
+        time.sleep(1)
         # ###
     # ### if loop ended or break then try to disconnect, set status to disconnected
     try:
         ble.gap_disconnect(vglob['handle'])
     except:
         vglob['status'] == 8
+    _thread.exit()
+    return
 
 # ### main function to handle irqs from mqtt
 
@@ -176,7 +180,17 @@ def fble_irq(event, data):
         addr_type, addr, adv_type, rssi, adv_data = data
         #vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes(adv_data)[2:14], time.time()]
         #re.sub('(\\\\x..|\ )', '', str())
-        vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)), time.time()]
+        # special case for presence sensors with FF:FF addresses
+        if bytes(addr)[0:2] == b'\xff\xff' and adv_type == 0:
+           adv_type = 4
+           # this has to be like this, to pass through the cleaner later
+           adv_data = b'__Tracker'
+        # only full detections, with names, so adv_type == 4
+        if adv_type == 4:
+           vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip(), time.time()]
+           #print( data, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip() )
+        else:
+           return
     elif event == 6:  # _IRQ_SCAN_DONE
         vwebpage = fwebpage()
         # ### scan done and cleanup, reseting variables as needed
@@ -194,12 +208,15 @@ def fble_irq(event, data):
         # ### disconnected 8, do actions
         # for mijia
         msg_out = ''
+        topic_out = ''
         if vglob['addr'][0:8] == '4C:65:A8' and vglob['result'] == 6:
             # ### only if result 3 = if notify succesful, then publish
             # ### create mqtt
             datas = str(bytes(vglob['data']), 'ascii').strip('\x00').strip().replace(' ', '=').split('=')
             msg_out = '{"trv":"' + vglob['addr'] + '","temp":"' + str(datas[1]) + '","hum":"' + str(datas[3]) + '"}'
-            topic_out = config2['mqtt_mijia_out']
+            # the last part of mac vglob['addr'][9:17].replace(":","")
+            #topic_out = config2['mqtt_mijia_out']
+            topic_out = 'esp/sensor/sensor' + str(vglob['addr'][9:17].replace(":","")) + '/state'
         if vglob['addr'][0:8] == '00:1A:22' and vglob['result'] == 6:
             # ### create mqtt
             datas = list(bytearray(vglob['data']))
@@ -215,6 +232,8 @@ def fble_irq(event, data):
             vwork_status[vglob['addr']] = msg_out
             # recache page only if something changed/sent
             vwebpage = fwebpage()
+            # sleep for jobs to finish
+            time.sleep(1)
         # ### if res 8, error, then add work again
         if vglob['result'] == 8:
             vwork[vglob['addr']] = vglob['work']
@@ -263,15 +282,17 @@ def fble_scan(var):
     vglob['status'] = 1
     vglob['result'] = 1
     vglob['work'] = 'scan'
-    print('start scan')
+    #print('start scan')
     # ### starting scans in thread, not to block console, etc.
     #ble.gap_scan(10000, 40000, 20000, 1)
+    # sleep for jobs to finish
+    time.sleep(1)
     if str(var) == '0':
         # 40 seconds as a full scan is more than necessary
-        _thread.start_new_thread(ble.gap_scan, (40 * 1000, 30000, 30000, 1))
+        _thread.start_new_thread(ble.gap_scan, (30 * 1000, 30000, 30000, 1))
     else:
         # was 15 seconds, is 20
-        _thread.start_new_thread(ble.gap_scan, (20 * 1000, 30000, 30000, 1))
+        _thread.start_new_thread(ble.gap_scan, (10 * 1000, 30000, 30000, 1))
     return
 
 
@@ -283,12 +304,14 @@ def fwork(var):
     #global vwebpage
     # ### fix the connection if needed
     # ### wlan fixes itself
-    if mqtth.is_conn_issue():
-        # ### reconnect
-        if mqtth.reconnect():
-            mqtth.resubscribe()
-        # stop function
-        return
+    mqtth.ping()
+    # removed, to remove the robust2 dependency
+    #if mqtth.is_conn_issue():
+    #    # ### reconnect
+    #    if mqtth.reconnect():
+    #        mqtth.resubscribe()
+    #    # stop function
+    #    return
     # ### trigger checking for messages, and wait for messages to arrive
     mqtth.check_msg()
     time.sleep(1)
@@ -323,9 +346,12 @@ def fwork(var):
                 worka.append('')
         # "offsetTemp":"-3.0", "valve":"79% open",
         # "mode":"manual","boost":"inactive","window":"closed","state":"unlocked","battery":"GOOD"}
+        # sleep for jobs to finish
+        time.sleep(1)
         # start thread
         _thread.start_new_thread(fble_write, (workaddr, worka[0], worka[1]))
-    gc.collect()
+    # not needed everywhere
+    #gc.collect()
     return
 
 
@@ -355,7 +381,7 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False):
     # ### whitelist could be added
     elif worka[0] not in vglob_list.keys():
         print('address not available')
-        return
+        #return
     # ### if addres in the list, of correct lenght, and command lenght between 5 and 14 letters
     elif len(worka[0]) == 17 and len(worka[1]) > 5 and len(worka[1]) < 14:
         # do not overwrite if work task is not 'manual', else add if not in the list
@@ -377,6 +403,8 @@ def fclean(var):
     global vglob
     global vglob_list
     # ### remove addresses older than 1 hour (was 2 hours)
+    # wait to be nice
+    time.sleep(1)
     for iii in vglob_list.items():
         if time.time() - iii[1][3] > 60 * 60 * 1:
             vglob_list.pop(iii[0])
@@ -387,9 +415,11 @@ def fclean(var):
         vglob['result'] = 0
         vglob['addr'] = ''
         vglob['work'] = ''
-        mqtth.reconnect()
-        mqtth.resubscribe()
+        #mqtth.reconnect()
+        #mqtth.resubscribe()
+        fmqtt_recover()
     gc.collect()
+    return
 
 #-###
 #-###
@@ -427,6 +457,7 @@ IP: """ + str(station.ifconfig()[0]) + """
 <a href="/info">System info</a><br/>
 <a href="/webrepl">Add webrepl</a> - <a href="http://micropython.org/webrepl/#""" + str(station.ifconfig()[0]) + """:8266/">Webrepl console</a> (pass: 1234)<br/>
 <br/>
+<a href="/mqttauto">Publish MQTT autodiscovery</a><br/>
 <a href="/scan">Rescan devices</a><br/>
 <a href="/purge">Remove old devices from list</a><br/>
 <a href="/reset">Reset</a>
@@ -437,7 +468,8 @@ IP: """ + str(station.ifconfig()[0]) + """
 <h2>Other</h2>
 </body>
 </html>"""
-    gc.collect()
+    # is this needed here ?
+    #gc.collect()
     # returning bytes, does not save memory
     return(str(html))
 
@@ -462,6 +494,7 @@ def loop_web():
     #webpage = ""
     while config2['loop']:
         # try to listen for connection
+        time.sleep(1)
         try:
             conn, addr = s.accept()
             timer1 = time.ticks_ms()
@@ -518,6 +551,20 @@ Connection: close
             #####
             #####
             elif request == "/info":
+                if machine.reset_cause() == 0:
+                     reset_cause = "PWRON_RESET"
+                elif machine.reset_cause() == 1:
+                     reset_cause = "HARD_RESET"
+                elif machine.reset_cause() == 2:
+                     reset_cause = "WDT_RESET"
+                elif machine.reset_cause() == 3:
+                     reset_cause = "DEEPSLEEP_RESET"
+                elif machine.reset_cause() == 4:
+                     reset_cause = "SOFT_RESET"
+                elif machine.reset_cause() == 5:
+                     reset_cause = "BROWN_OUT_RESET"
+                else:
+                     reset_cause = "unknown"
                 webpagea = """Directory listing on ESP. By writing /deldo?filename, files can be removed (dangerous).
 Files with _old are safety copies after OTA, can be safely removed.
 To disable webrepl, delete webrepl_cfg.py and reboot device.
@@ -527,6 +574,7 @@ Dir: """ + str(os.listdir()) + """
 Current work: """ + str(vglob) + """
 Scheduled work: """ + str(vwork) + """
 
+Reset cause: """ + str(reset_cause) + """
 Free RAM (over 40k is fine, 70k is good): """ + str(gc.mem_free()) + """."""
 
                 header = """HTTP/1.1 200 OK
@@ -565,6 +613,17 @@ Content-Length: 15
 Connection: close
 
 Scan scheduled.
+"""
+                conn.sendall(header + "\r\n" + webpagea)
+                # machine.reset()
+            elif request == "/mqttauto":
+                fmqttdiscovery()
+                header = """HTTP/1.1 200 OK
+Content-Type: text/html
+Content-Length: 30
+Connection: close
+
+MQTT Autodiscovery published.
 """
                 conn.sendall(header + "\r\n" + webpagea)
                 # machine.reset()
@@ -703,6 +762,7 @@ Connection: close
                 # conn.close()
                 # time.sleep(2) # no sleep here ;)
                 machine.reset()
+                time.sleep(1)
             #####
             #####
             else:
@@ -730,33 +790,68 @@ Connection: close
         webpagea = ""
         #vwebpage = ""
         gc.collect()
+        #time.sleep(1)
     # END WHILE
     # the function ends if loop fails
     # so this is not good
     # maybe reboot here ?
-    sleep(60)  # first wait 1 minute, just in case, for webrepl etc
+    time.sleep(60)  # first wait 1 minute, just in case, for webrepl etc
     if keep_loop:
         machine.reset()
 
 
 def fmqttdiscovery():
-    print("test")
-    topict = 'homeassistant/sensor/MijiaMACTemp/config'
-    devicet = '{"device_class": "temperature", "name": "MijiaMACTemp", "state_topic": "homeassistant/sensor/sensorMAC/state", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", "uniq_id": "MAC_T", "dev": { "ids": [ "MAC" ] } }'
-    topich = 'homeassistant/sensor/MijiaMACHum/config'
-    topich = '{"device_class": "humidity", "name": "MijiaMACHum", "state_topic": "homeassistant/sensor/sensorMAC/state", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", "uniq_id": "MAC_H" }'
-####
+    #print("publishing mqtt autodiscovery")
+    #topic_out = 'esp/sensor/sensor' + str(vglob['addr'][9:17].replace(":","")) + '/state'
+    for hhh in vwork_status:
+        if hhh[0:8] == '4C:65:A8':
+            #html_in += str(vvv) + "\n"
+            mac = str(hhh[9:17].replace(":",""))
+            topict = 'homeassistant/sensor/Mijia' + mac + 'Temp/config'
+            devicet = '{"device_class": "temperature", "name": "Mijia ' + mac + ' Temperature", "state_topic": "esp/sensor/sensor' + mac + '/state", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", "uniq_id": "' + mac + '_T", "dev": { "ids": [ "' + mac + '" ], "name":"Mijia ' + mac + '" } }'
+            mqtth.publish(topict, bytes(devicet, 'ascii'))
+            topich = 'homeassistant/sensor/Mijia' + mac + 'Hum/config'
+            deviceh = '{"device_class": "humidity", "name": "Mijia ' + mac + ' Humidity", "state_topic": "esp/sensor/sensor' + mac + '/state", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", "uniq_id": "' + mac + '_H", "dev": { "ids": [ "' + mac + '" ], "name":"Mijia ' + mac + '" } }'
+            mqtth.publish(topich, bytes(deviceh, 'ascii'))
+    time.sleep(1)
+    return
 
+#  "~": "homeassistant/light/kitchen",
+#topicc = 'homeassistant/climate/Eq3' + mac + 'Clim/config'
+#devicec = '{
+#  "name":"Eq3' + mac + 'Clim",
+#  "mode_cmd_t":"homeassistant/climate/climate' + mac + '/thermostatModeCmd",
+#  "mode_stat_t":"homeassistant/climate/climate' + mac + '/state",
+#  "mode_stat_tpl":"",
+#  "temp_cmd_t":"homeassistant/climate/climate' + mac + '/targetTempCmd",
+#  "temp_stat_t":"homeassistant/climate/climate' + mac + '/state",
+#  "temp_stat_tpl":"",
+#  "curr_temp_t":"homeassistant/climate/climate' + mac + '/state",
+#  "curr_temp_tpl":"",
+#  "min_temp":"12",
+#  "max_temp":"28",
+#  "temp_step":"0.5",
+#  "modes":["off", "manual"]
+#}'
+
+####
+def fmqtt_recover():
+    mqtth.connect()
+    mqtth.subscribe(config2['mqtt_eq3_in'])
+    time.sleep(1)
+    return
 
 def fschedule(var):
     fclean(1)
+
     # add timers, or last run
     vwork['0'] = 'scan'
     # add schedule for eq3 querying
     # add schedule for mijia querying
     # add schedule for hardware thermometer testing, but this can be queried every time
     # split "purging" cleaning and restart work
-
+    time.sleep(1)
+    return
 
 # ### connect interrupts
 ble.irq(fble_irq)
@@ -764,8 +859,8 @@ ble.irq(fble_irq)
 # ### mqtt
 mqtth = umqtt.MQTTClient(config2['mqtt_usr'], config2['mqtt_srv'], user=config2['mqtt_usr'], password=config2['mqtt_usr'], port=1883)
 mqtth.set_callback(fmqtt_irq)
-mqtth.connect()
-mqtth.subscribe(config2['mqtt_eq3_in'])
+fmqtt_recover()
+
 #mqtth.keepalive = 1
 
 vwebpage = fwebpage()
