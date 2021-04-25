@@ -101,16 +101,18 @@ def fble_write(addr, data1, data2=''):
         elif vglob['status'] == 8:
             try:
                 ble.gap_connect(0, vglob_list[addr][0])
-            except:
+            except Exception as e:
+                print('exc:', e)
                 # break
                 continue
             # ### if connection fails, try again, so no break but continue, as status 8 is expected
-            time.sleep(2)
+            finally:
+                time.sleep(2)
         # ### if connection goes well and status is 7, then work
         # elif vglob['addr'] != '' and vglob['status'] == 7:
         # ### result 2, if connected then write
         elif vglob['result'] == 2 and vglob['status'] == 7:
-            time.sleep(1)
+            # time.sleep(1)
             # ### check temp value
             if addr[0:8] == '4C:65:A8' and data1 == 'gettemp':
                 data1 = 0x10
@@ -134,16 +136,21 @@ def fble_write(addr, data1, data2=''):
             # ### and variables cleaned, try to write
             try:
                 ble.gattc_write(vglob['handle'], data1, data2, 1)
-            except:
+            except Exception as e:
+                print('exc:', e)
                 # ### if error with writing, simulate disconnect and result error 8
                 vglob['result'] = 8
                 # ### disconnect if needed
                 vglob['status'] = 18
                 # break
-            time.sleep(2)
+            finally:
+                #
+                time.sleep(2)
         elif vglob['status'] == 17:
             # ### if status 17, written, but not 18, response, then wait
-            time.sleep(1)
+            # time.sleep(1)
+            #
+            pass
         elif vglob['status'] == 18:
             # ### if status 18, success write and response, then break the loop and disconnect
             # ### here, work from work list can be removed
@@ -158,7 +165,7 @@ def fble_write(addr, data1, data2=''):
         ble.gap_disconnect(vglob['handle'])
     except:
         vglob['status'] == 8
-    _thread.exit()
+    # _thread.exit()
     return
 
 # ### main function to handle irqs from mqtt
@@ -182,15 +189,15 @@ def fble_irq(event, data):
         #re.sub('(\\\\x..|\ )', '', str())
         # special case for presence sensors with FF:FF addresses
         if bytes(addr)[0:2] == b'\xff\xff' and adv_type == 0:
-           adv_type = 4
-           # this has to be like this, to pass through the cleaner later
-           adv_data = b'__Tracker'
+            adv_type = 4
+            # this has to be like this, to pass through the cleaner later
+            adv_data = b'__Tracker'
         # only full detections, with names, so adv_type == 4
         if adv_type == 4:
-           vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip(), time.time()]
-           #print( data, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip() )
+            vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip(), time.time()]
+            #print( data, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip() )
         else:
-           return
+            return
     elif event == 6:  # _IRQ_SCAN_DONE
         vwebpage = fwebpage()
         # ### scan done and cleanup, reseting variables as needed
@@ -216,7 +223,7 @@ def fble_irq(event, data):
             msg_out = '{"trv":"' + vglob['addr'] + '","temp":"' + str(datas[1]) + '","hum":"' + str(datas[3]) + '"}'
             # the last part of mac vglob['addr'][9:17].replace(":","")
             #topic_out = config2['mqtt_mijia_out']
-            topic_out = 'esp/sensor/sensor' + str(vglob['addr'][9:17].replace(":","")) + '/state'
+            topic_out = 'esp/sensor/sensor' + str(vglob['addr'][9:17].replace(":", "")) + '/state'
         if vglob['addr'][0:8] == '00:1A:22' and vglob['result'] == 6:
             # ### create mqtt
             datas = list(bytearray(vglob['data']))
@@ -286,35 +293,42 @@ def fble_scan(var):
     # ### starting scans in thread, not to block console, etc.
     #ble.gap_scan(10000, 40000, 20000, 1)
     # sleep for jobs to finish
-    time.sleep(1)
+    # time.sleep(1)
     if str(var) == '0':
         # 40 seconds as a full scan is more than necessary
         _thread.start_new_thread(ble.gap_scan, (30 * 1000, 30000, 30000, 1))
     else:
         # was 15 seconds, is 20
         _thread.start_new_thread(ble.gap_scan, (10 * 1000, 30000, 30000, 1))
+    time.sleep(1)
     return
 
 
 def fwork(var):
-    # ### this a worker controller, it checks for messages and starts the worker thread if needed
+    # ### this a worker controller
+    # ### it checks for messages and starts the worker thread if needed
     global vglob
     #global vwork
     global vwork
     #global vwebpage
     # ### fix the connection if needed
     # ### wlan fixes itself
-    mqtth.ping()
+    # mqtth.ping()
     # removed, to remove the robust2 dependency
-    #if mqtth.is_conn_issue():
+    # if mqtth.is_conn_issue():
     #    # ### reconnect
     #    if mqtth.reconnect():
     #        mqtth.resubscribe()
     #    # stop function
     #    return
+    if vglob['status'] == 5:
+        # if scan is running, skip round
+        mqtth.ping()
+        time.sleep(1)
+        return
     # ### trigger checking for messages, and wait for messages to arrive
     mqtth.check_msg()
-    time.sleep(1)
+    # time.sleep(1)
     # ### expecting non 0 worklist, status 8 disconnected, and empty addr
     if len(vwork) > 0 and vglob['status'] == 8 and vglob['result'] == 0:
         # ### reset the last work timer
@@ -347,11 +361,12 @@ def fwork(var):
         # "offsetTemp":"-3.0", "valve":"79% open",
         # "mode":"manual","boost":"inactive","window":"closed","state":"unlocked","battery":"GOOD"}
         # sleep for jobs to finish
-        time.sleep(1)
+
         # start thread
         _thread.start_new_thread(fble_write, (workaddr, worka[0], worka[1]))
+        time.sleep(1)
     # not needed everywhere
-    #gc.collect()
+    # gc.collect()
     return
 
 
@@ -375,13 +390,13 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False):
         elif worka[0] == 'reset':
             # reset
             machine.reset()
-            # is this necessary ?
-            time.sleep(1)
+            # is this necessary ? NO
+            # time.sleep(1)
     # ### if above not true and address not in the list, then skip
     # ### whitelist could be added
     elif worka[0] not in vglob_list.keys():
         print('address not available')
-        #return
+        # return
     # ### if addres in the list, of correct lenght, and command lenght between 5 and 14 letters
     elif len(worka[0]) == 17 and len(worka[1]) > 5 and len(worka[1]) < 14:
         # do not overwrite if work task is not 'manual', else add if not in the list
@@ -415,8 +430,8 @@ def fclean(var):
         vglob['result'] = 0
         vglob['addr'] = ''
         vglob['work'] = ''
-        #mqtth.reconnect()
-        #mqtth.resubscribe()
+        # mqtth.reconnect()
+        # mqtth.resubscribe()
         fmqtt_recover()
     gc.collect()
     return
@@ -469,7 +484,7 @@ IP: """ + str(station.ifconfig()[0]) + """
 </body>
 </html>"""
     # is this needed here ?
-    #gc.collect()
+    # gc.collect()
     # returning bytes, does not save memory
     return(str(html))
 
@@ -499,7 +514,7 @@ def loop_web():
             conn, addr = s.accept()
             timer1 = time.ticks_ms()
             # this is maybe not needed ?
-            # conn.settimeout(10)
+            conn.settimeout(10)
             # this is fast
             # find for requests was VERY slow
             # requestfull = conn.recv(64).decode()  # [4:-6]
@@ -552,19 +567,19 @@ Connection: close
             #####
             elif request == "/info":
                 if machine.reset_cause() == 0:
-                     reset_cause = "PWRON_RESET"
+                    reset_cause = "PWRON_RESET"
                 elif machine.reset_cause() == 1:
-                     reset_cause = "HARD_RESET"
+                    reset_cause = "HARD_RESET"
                 elif machine.reset_cause() == 2:
-                     reset_cause = "WDT_RESET"
+                    reset_cause = "WDT_RESET"
                 elif machine.reset_cause() == 3:
-                     reset_cause = "DEEPSLEEP_RESET"
+                    reset_cause = "DEEPSLEEP_RESET"
                 elif machine.reset_cause() == 4:
-                     reset_cause = "SOFT_RESET"
+                    reset_cause = "SOFT_RESET"
                 elif machine.reset_cause() == 5:
-                     reset_cause = "BROWN_OUT_RESET"
+                    reset_cause = "BROWN_OUT_RESET"
                 else:
-                     reset_cause = "unknown"
+                    reset_cause = "unknown"
                 webpagea = """Directory listing on ESP. By writing /deldo?filename, files can be removed (dangerous).
 Files with _old are safety copies after OTA, can be safely removed.
 To disable webrepl, delete webrepl_cfg.py and reboot device.
@@ -617,7 +632,7 @@ Scan scheduled.
                 conn.sendall(header + "\r\n" + webpagea)
                 # machine.reset()
             elif request == "/mqttauto":
-                fmqttdiscovery()
+                fmqtt_discover()
                 header = """HTTP/1.1 200 OK
 Content-Type: text/html
 Content-Length: 30
@@ -672,7 +687,7 @@ Connection: close
                 headerin = conn.recv(500).decode()
                 boundaryin = headerin.split("boundary=", 2)[1].split('\r\n')[0]
                 lenin = int(headerin.split("\r\nContent-Length: ", 2)[1].split('\r\n')[0])
-                bufflen = round(lenin / float(str(round(lenin / 4000)) + ".5"))
+                bufflen = round(lenin / float(str(round(lenin / 3000)) + ".5"))
                 #lenin = 0
                 # print("===")
                 #print( headerin )
@@ -762,7 +777,7 @@ Connection: close
                 # conn.close()
                 # time.sleep(2) # no sleep here ;)
                 machine.reset()
-                time.sleep(1)
+                # time.sleep(1)
             #####
             #####
             else:
@@ -780,7 +795,7 @@ Connection: close
             # conn.close() # close or not ?
             # whatever
         except Exception as e:
-            #print('Just web loop info:', e)
+            print('exc:', e)
             # timeout message hidden
             pass
         # END TRY
@@ -790,35 +805,41 @@ Connection: close
         webpagea = ""
         #vwebpage = ""
         gc.collect()
-        #time.sleep(1)
+        # time.sleep(1)
     # END WHILE
     # the function ends if loop fails
     # so this is not good
     # maybe reboot here ?
     time.sleep(60)  # first wait 1 minute, just in case, for webrepl etc
-    if keep_loop:
+    if config2['loop']:
         machine.reset()
 
+# ###
 
-def fmqttdiscovery():
+
+def fmqtt_discover():
     #print("publishing mqtt autodiscovery")
     #topic_out = 'esp/sensor/sensor' + str(vglob['addr'][9:17].replace(":","")) + '/state'
     for hhh in vwork_status:
+        time.sleep(1)
         if hhh[0:8] == '4C:65:A8':
             #html_in += str(vvv) + "\n"
-            mac = str(hhh[9:17].replace(":",""))
+            mac = str(hhh[9:17].replace(":", ""))
             topict = 'homeassistant/sensor/Mijia' + mac + 'Temp/config'
-            devicet = '{"device_class": "temperature", "name": "Mijia ' + mac + ' Temperature", "state_topic": "esp/sensor/sensor' + mac + '/state", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", "uniq_id": "' + mac + '_T", "dev": { "ids": [ "' + mac + '" ], "name":"Mijia ' + mac + '" } }'
+            devicet = '{"device_class": "temperature", "name": "Mijia ' + mac + ' Temperature", "state_topic": "esp/sensor/sensor' + mac + \
+                '/state", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", "uniq_id": "' + \
+                mac + '_T", "dev": { "ids": [ "' + mac + '" ], "name":"Mijia ' + mac + '" } }'
             mqtth.publish(topict, bytes(devicet, 'ascii'))
             topich = 'homeassistant/sensor/Mijia' + mac + 'Hum/config'
-            deviceh = '{"device_class": "humidity", "name": "Mijia ' + mac + ' Humidity", "state_topic": "esp/sensor/sensor' + mac + '/state", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", "uniq_id": "' + mac + '_H", "dev": { "ids": [ "' + mac + '" ], "name":"Mijia ' + mac + '" } }'
+            deviceh = '{"device_class": "humidity", "name": "Mijia ' + mac + ' Humidity", "state_topic": "esp/sensor/sensor' + mac + \
+                '/state", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", "uniq_id": "' + \
+                mac + '_H", "dev": { "ids": [ "' + mac + '" ], "name":"Mijia ' + mac + '" } }'
             mqtth.publish(topich, bytes(deviceh, 'ascii'))
-    time.sleep(1)
     return
 
 #  "~": "homeassistant/light/kitchen",
 #topicc = 'homeassistant/climate/Eq3' + mac + 'Clim/config'
-#devicec = '{
+# devicec = '{
 #  "name":"Eq3' + mac + 'Clim",
 #  "mode_cmd_t":"homeassistant/climate/climate' + mac + '/thermostatModeCmd",
 #  "mode_stat_t":"homeassistant/climate/climate' + mac + '/state",
@@ -832,26 +853,33 @@ def fmqttdiscovery():
 #  "max_temp":"28",
 #  "temp_step":"0.5",
 #  "modes":["off", "manual"]
-#}'
+# }'
 
 ####
+
+# ###
+
+
 def fmqtt_recover():
     mqtth.connect()
-    mqtth.subscribe(config2['mqtt_eq3_in'])
     time.sleep(1)
+    mqtth.subscribe(config2['mqtt_eq3_in'])
     return
+
+# ###
+
 
 def fschedule(var):
     fclean(1)
-
+    time.sleep(1)
     # add timers, or last run
     vwork['0'] = 'scan'
     # add schedule for eq3 querying
     # add schedule for mijia querying
     # add schedule for hardware thermometer testing, but this can be queried every time
     # split "purging" cleaning and restart work
-    time.sleep(1)
     return
+
 
 # ### connect interrupts
 ble.irq(fble_irq)
@@ -871,7 +899,7 @@ loopwebthread = _thread.start_new_thread(loop_web, ())
 # ### scan every 10 minutes
 # scan can be added by automatic timer, or mqtt, or web
 timer_schedule.init(period=(10 * 60 * 1000), callback=fschedule)
-# ### work every 10 seconds
+# ### work every 5 seconds
 timer_work.init(period=(5 * 1000), callback=fwork)
 # ### clean every 50 minutes
 #timer_clean.init(period=(1 * 50 * 60 * 1000), callback=fclean)
