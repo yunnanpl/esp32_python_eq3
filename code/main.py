@@ -3,10 +3,8 @@
 # whitelist here
 # blacklist here
 
-# cleaning up names
-#re.sub('\s\W+', '', aaa)
-#re.sub('(\W|\-)+', '', list(vglob_list.values())[7][2])
-#bytes((x for x in a if x >= 0x20 and x < 127))
+# maybe add micropython version
+#os.uname()
 
 # get uptime (time.ticks_ms()/1000/60/60/24)
 # or set time.time() as a boot time
@@ -27,20 +25,8 @@ vglob_list = {}
 vwork = OrderedDict()
 
 vwork_status = {}
-# ### data
-#vmijia_data = [0, 0]
 
-#import random
-# random.choice([1,2,3])
-
-# ### define results
-# removed
-
-# ### definitions
-
-# def localtime(  ):
-
-
+# ###
 def fnow(nowtime="", ttt="s"):
     # typing time.time in default value does not work
     if nowtime == "":
@@ -73,8 +59,6 @@ def fprint(cmd='show'):
     global vglob_list
     ret = ""
     for iii in vglob_list.items():
-        # if cmd == 'clean' and time.time() - iii[1][3] > 60*60: # now 1 hour instead of 2
-        #   vglob_list.pop(iii[0])
         ret += str(iii[0]) + " " + '{: >{w}}'.format(str(time.time() - iii[1][3]), w=5) + " " + str(iii[1][1]) + " " + str(iii[1][2]) + "\n"
     if cmd == 'show':
         print(ret)
@@ -109,7 +93,6 @@ def fble_write(addr, data1, data2=''):
             finally:
                 time.sleep(2)
         # ### if connection goes well and status is 7, then work
-        # elif vglob['addr'] != '' and vglob['status'] == 7:
         # ### result 2, if connected then write
         elif vglob['result'] == 2 and vglob['status'] == 7:
             # time.sleep(1)
@@ -176,7 +159,6 @@ def fble_irq(event, data):
     global vglob
     global vwebpage
     global vwork_status
-    #global vmijia_data
     # ### get event variable and publish global so other threads react as needed
     vglob['status'] = event
     # if event == 17: # 17
@@ -185,8 +167,6 @@ def fble_irq(event, data):
     if event == 5:  # _IRQ_SCAN_RESULT
         # ### scan results, and publish gathered addresses in vglob_list
         addr_type, addr, adv_type, rssi, adv_data = data
-        #vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes(adv_data)[2:14], time.time()]
-        #re.sub('(\\\\x..|\ )', '', str())
         # special case for presence sensors with FF:FF addresses
         if bytes(addr)[0:2] == b'\xff\xff' and adv_type == 0:
             adv_type = 4
@@ -195,7 +175,6 @@ def fble_irq(event, data):
         # only full detections, with names, so adv_type == 4
         if adv_type == 4:
             vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip(), time.time()]
-            #print( data, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip() )
         else:
             return
     elif event == 6:  # _IRQ_SCAN_DONE
@@ -207,8 +186,6 @@ def fble_irq(event, data):
     elif event == 7:  # _IRQ_PERIPHERAL_CONNECT
         # ### connected 7
         vglob['handle'], addr_type, addr = data
-        #vglob['addr'] = str(fdecode_addr(addr))
-        #vmijia_data = [0, 0]
         vglob['result'] = 2
         vglob_list[vglob['addr']][3] = time.time()
     elif event == 8:  # _IRQ_PERIPHERAL_DISCONNECT
@@ -221,7 +198,6 @@ def fble_irq(event, data):
             # ### create mqtt
             datas = str(bytes(vglob['data']), 'ascii').strip('\x00').strip().replace(' ', '=').split('=')
             msg_out = '{"trv":"' + vglob['addr'] + '","temp":"' + str(datas[1]) + '","hum":"' + str(datas[3]) + '"}'
-            # the last part of mac vglob['addr'][9:17].replace(":","")
             #topic_out = config2['mqtt_mijia_out']
             topic_out = 'esp/sensor/sensor' + str(vglob['addr'][9:17].replace(":", "")) + '/state'
         if vglob['addr'][0:8] == '00:1A:22' and vglob['result'] == 6:
@@ -230,8 +206,6 @@ def fble_irq(event, data):
             msg_out = '{"trv":"' + vglob['addr'] + '","temp":"' + str(float(datas[5]) / 2) + '","mode":"manual"}'
             topic_out = config2['mqtt_eq3_out']
             #mqtth.publish(config2['mqtt_eq3_out'], bytes(msg_out, 'ascii'))
-        # ### for eq3
-        # if vglob['addr'] != '' and vglob['result'] == 4:
         # ### if connection or writing not succesful, then re-add
         if msg_out != '':
             #print('=== msg ===', msg_out)
@@ -246,9 +220,6 @@ def fble_irq(event, data):
             vwork[vglob['addr']] = vglob['work']
             vglob['addr'] = ''
             vglob['work'] = ''
-        # ### not needed
-        # if vglob['addr'] != '':
-        #    vglob['result'] = 0
         # ### end and cleanup
         # ### do not cleanup completely if connection loop is running
         # ### to disallow new work to be taken
@@ -269,14 +240,6 @@ def fble_irq(event, data):
         # ### for mijia
         vglob['data'] = notify_data
         # if vglob['addr'][0:8] == '4C:65:A8':
-        #
-        # ### for eq3
-        # if vglob['addr'][0:8] == '00:1A:22':
-        #    aaa = list(bytearray(notify_data))
-        #    # send mqtt
-        #    msg_out = '{"trv":"' + vglob['addr'] + '","temp":"' + str(float(aaa[5]) / 2) + '","mode":"manual"}'
-        #    # print(msg_out)
-        #    mqtth.publish(config2['mqtt_eq3_out'], bytes(msg_out, 'ascii'))
         # ### set result to 3, which means success notify
         vglob['result'] = 6
     else:
@@ -290,8 +253,6 @@ def fble_scan(var):
     vglob['result'] = 1
     vglob['work'] = 'scan'
     #print('start scan')
-    # ### starting scans in thread, not to block console, etc.
-    #ble.gap_scan(10000, 40000, 20000, 1)
     # sleep for jobs to finish
     # time.sleep(1)
     if str(var) == '0':
@@ -313,14 +274,6 @@ def fwork(var):
     #global vwebpage
     # ### fix the connection if needed
     # ### wlan fixes itself
-    # mqtth.ping()
-    # removed, to remove the robust2 dependency
-    # if mqtth.is_conn_issue():
-    #    # ### reconnect
-    #    if mqtth.reconnect():
-    #        mqtth.resubscribe()
-    #    # stop function
-    #    return
     if vglob['status'] == 5:
         # if scan is running, skip round
         mqtth.ping()
@@ -417,11 +370,11 @@ def fclean(var):
     # ### yes, cleaning
     global vglob
     global vglob_list
-    # ### remove addresses older than 1 hour (was 2 hours)
+    # ### remove addresses older than 0.5 hour (was 2 hours)
     # wait to be nice
     time.sleep(1)
     for iii in vglob_list.items():
-        if time.time() - iii[1][3] > 60 * 60 * 1:
+        if time.time() - iii[1][3] > 30 * 60 * 1:
             vglob_list.pop(iii[0])
     # ### when no job done in last 20 mintes, then clean job variable and reconnect mqtt
     if time.time() - vglob['time'] > 20 * 60:
@@ -483,8 +436,6 @@ IP: """ + str(station.ifconfig()[0]) + """
 <h2>Other</h2>
 </body>
 </html>"""
-    # is this needed here ?
-    # gc.collect()
     # returning bytes, does not save memory
     return(str(html))
 
@@ -498,8 +449,8 @@ def loop_web():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     # SO_REUSEPORT, whatever this is good for ?
-    # from 300 to 60
-    s.settimeout(120)
+    # from 300 to 60 to 30
+    s.settimeout(30)
     # s.setblocking(1) # works with both
     s.setblocking(1)
     s.bind(('', 80))
@@ -517,8 +468,6 @@ def loop_web():
             conn.settimeout(10)
             # this is fast
             # find for requests was VERY slow
-            # requestfull = conn.recv(64).decode()  # [4:-6]
-            #request = requestfull.split('\r')[0].split(' ')[1].split('?')[0]
             requestfull = conn.recv(64).decode().split('\r')[0].split(' ')[1].split('?')  # [4:-6]
             request = requestfull[0]
             requestval = ""
