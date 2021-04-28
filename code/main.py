@@ -72,6 +72,7 @@ def fble_write(addr, data1, data2=''):
     global vglob_list
     global vglob
     global vwork
+    #print('- fble_write - ', str(addr), str(data1))
     # ### main loop
     # ### try connection 20 times, if succesful stop the loop
     for iii in range(10):
@@ -161,6 +162,7 @@ def fble_irq(event, data):
     global vwork_status
     # ### get event variable and publish global so other threads react as needed
     vglob['status'] = event
+    #print('- fble_irq - ', str(event))
     # if event == 17: # 17
     #    print('--', event, '--', vglob['addr'])
     # ###
@@ -174,7 +176,8 @@ def fble_irq(event, data):
             adv_data = b'__Tracker'
         # only full detections, with names, so adv_type == 4
         if adv_type == 4:
-            vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:20] if x >= 0x20 and x < 127)).decode("ascii").strip(), time.time()]
+            #print( str(bytes(adv_data)[2:24].split(b'\xff')[0] ) )
+            vglob_list[str(fdecode_addr(addr))] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:22].split(b'\xff')[0] if x >= 0x20 and x < 127)).decode("ascii").strip(), time.time()]
         else:
             return
     elif event == 6:  # _IRQ_SCAN_DONE
@@ -249,6 +252,7 @@ def fble_irq(event, data):
 
 def fble_scan(var):
     # ### starting scanning thread and setting variables
+    #print('- fble_scan - ', str(var))
     vglob['status'] = 1
     vglob['result'] = 1
     vglob['work'] = 'scan'
@@ -257,15 +261,16 @@ def fble_scan(var):
     # time.sleep(1)
     if str(var) == '0':
         # 40 seconds as a full scan is more than necessary
-        _thread.start_new_thread(ble.gap_scan, (30 * 1000, 30000, 30000, 1))
+        # was 30, but made 40 at boot
+        _thread.start_new_thread(ble.gap_scan, (40 * 1000, 30000, 30000, 1))
     else:
-        # was 15 seconds, is 20
-        _thread.start_new_thread(ble.gap_scan, (10 * 1000, 30000, 30000, 1))
+        # was 15 seconds, is 20, 10 is a little too short
+        _thread.start_new_thread(ble.gap_scan, (15 * 1000, 30000, 30000, 1))
     time.sleep(1)
     return
 
 
-def fwork(var):
+def fget_work(var):
     # ### this a worker controller
     # ### it checks for messages and starts the worker thread if needed
     global vglob
@@ -274,6 +279,7 @@ def fwork(var):
     #global vwebpage
     # ### fix the connection if needed
     # ### wlan fixes itself
+    #print('- fwork - ')
     if vglob['status'] == 5:
         # if scan is running, skip round
         mqtth.ping()
@@ -330,9 +336,9 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False):
         msg = msg.decode()
     if type(topic) is bytes:
         topic = topic.decode()
-    #print('- irq -', msg)
     # ### split address and command
     worka = str(msg).strip().split(' ', 1)
+    #print('- fmqtt_irq - ', str(msg))
     # ### if len 1, then scan and reset allowed
     # ### scan, adds scan to worklist, reset - resets immediately
     if len(worka) == 1:
@@ -370,14 +376,14 @@ def fclean(var):
     # ### yes, cleaning
     global vglob
     global vglob_list
-    # ### remove addresses older than 0.5 hour (was 2 hours)
+    # ### remove addresses older than 31 minutes (was 2 hours)
     # wait to be nice
     time.sleep(1)
     for iii in vglob_list.items():
-        if time.time() - iii[1][3] > 30 * 60 * 1:
+        if time.time() - iii[1][3] > 31 * 60 * 1:
             vglob_list.pop(iii[0])
-    # ### when no job done in last 20 mintes, then clean job variable and reconnect mqtt
-    if time.time() - vglob['time'] > 20 * 60:
+    # ### when no job done in last 10 mintes, then clean job variable and reconnect mqtt
+    if time.time() - vglob['time'] > 10 * 60:
         vglob['time'] = time.time()
         vglob['status'] = 8
         vglob['result'] = 0
@@ -427,7 +433,6 @@ IP: """ + str(station.ifconfig()[0]) + """
 <br/>
 <a href="/mqttauto">Publish MQTT autodiscovery</a><br/>
 <a href="/scan">Rescan devices</a><br/>
-<a href="/purge">Remove old devices from list</a><br/>
 <a href="/reset">Reset</a>
 <h2>List of contacted devices</h2>
 <pre>
@@ -539,6 +544,7 @@ Current work: """ + str(vglob) + """
 Scheduled work: """ + str(vwork) + """
 
 Reset cause: """ + str(reset_cause) + """
+Micropython version: """ + str(os.uname()) + """
 Free RAM (over 40k is fine, 70k is good): """ + str(gc.mem_free()) + """."""
 
                 header = """HTTP/1.1 200 OK
@@ -784,6 +790,7 @@ def fmqtt_discover():
                 '/state", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", "uniq_id": "' + \
                 mac + '_H", "dev": { "ids": [ "' + mac + '" ], "name":"Mijia ' + mac + '" } }'
             mqtth.publish(topich, bytes(deviceh, 'ascii'))
+    gc.collect()
     return
 
 #  "~": "homeassistant/light/kitchen",
@@ -813,6 +820,7 @@ def fmqtt_recover():
     mqtth.connect()
     time.sleep(1)
     mqtth.subscribe(config2['mqtt_eq3_in'])
+    gc.collect()
     return
 
 # ###
@@ -827,6 +835,7 @@ def fschedule(var):
     # add schedule for mijia querying
     # add schedule for hardware thermometer testing, but this can be queried every time
     # split "purging" cleaning and restart work
+    gc.collect()
     return
 
 
@@ -846,14 +855,17 @@ loopwebthread = _thread.start_new_thread(loop_web, ())
 
 # ### timers
 # ### scan every 10 minutes
+# quic scan could be done every 5 min
 # scan can be added by automatic timer, or mqtt, or web
 timer_schedule.init(period=(10 * 60 * 1000), callback=fschedule)
 # ### work every 5 seconds
-timer_work.init(period=(5 * 1000), callback=fwork)
+# maybe lower to 4 seconds ?
+timer_work.init(period=(4 * 1000), callback=fget_work)
 # ### clean every 50 minutes
 #timer_clean.init(period=(1 * 50 * 60 * 1000), callback=fclean)
 
 # ### first scan, longer
 fble_scan(0)
 
+gc.collect()
 #-###
