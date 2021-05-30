@@ -82,6 +82,8 @@ and variables:
 
 # Changes
  - new
+   + webpage is running on async instead of sockets now
+   + some basic work was done to add enforced device discovery and mqtt messages for home assistant auto-configuration
    + added basic OTA !!!
      + files can be uploaded and removed from ESP through the page (will be documented soon)
      + works for any text file, does not work for binary files yet...
