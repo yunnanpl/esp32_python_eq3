@@ -6,14 +6,18 @@
 #-###
 #-###
 # -### imports, also config and settings
+#
+from secret_cfg import *
+# speedup/slow down for energy saving :)
+import machine
+machine.freq(config['freq'])
+#
 import os
-# substitute with bytes((x for x in a if x >= 0x20 and x < 127))
 #import re
 from collections import OrderedDict
 #import robust2 as umqtt
 import simple2 as umqtt
-import socket
-import _thread
+#import socket
 import gc
 import ubluetooth
 # not necessary
@@ -21,10 +25,10 @@ import ubluetooth
 import time
 import ntptime
 import network
-from secret_cfg import *
-# speedup/slow down for energy saving :)
-import machine
-machine.freq(config['freq'])
+#
+import _thread
+import uasyncio as asyncio
+# other modules
 #from machine import Pin, DAC, PWM, ADC, SoftI2C
 #from machine import Pin
 #import umqtt
@@ -49,10 +53,13 @@ timer_work = machine.Timer(1)
 #-###
 #-###
 # -### conenct to network
-station = network.WLAN(network.STA_IF)
-station.active(True)
-#station.connect( config['wifi_name'], binascii.a2b_base64( config['wifi_pass'] ) )
-station.connect(config['wifi_name'], "".join([chr(x) for x in config['wifi_pass']]))
+try:
+   station = network.WLAN(network.STA_IF)
+   station.active(True)
+   #station.connect( config['wifi_name'], binascii.a2b_base64( config['wifi_pass'] ) )
+   station.connect(config['wifi_name'], "".join([chr(x) for x in config['wifi_pass']]))
+except:
+   pass
 
 #-###
 #-###
