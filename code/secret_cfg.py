@@ -17,6 +17,12 @@ config2 = {}
 config2['mqtt_eq3_in'] = '/hass/climate/climate/radin/trv'
 config2['mqtt_eq3_out'] = '/hass/climate/climate/radout/status'
 config2['mqtt_mijia_out'] = '/hass/climate/thermo/status'
+
+config2['mqtt_eq3'] = 'esp/climate/'
+config2['mqtt_temp'] = 'esp/thermo/'
+# source of real temperature, some other mqtt thermometer or something
+config2['mqtt_temp_src'] = ''
+
 config2['mqtt_srv'] = 'mqtt_srv'
 config2['mqtt_usr'] = 'mqtt_usr'
 config2['mqtt_pass'] = 'mqtt_pass'

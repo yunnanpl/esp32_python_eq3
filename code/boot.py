@@ -16,7 +16,7 @@ import ubluetooth
 import gc
 import simple2 as umqtt
 #import robust2 as umqtt
-from collections import OrderedDict
+#from collections import OrderedDict
 import os
 from secret_cfg import *
 # speedup/slow down for energy saving :)
@@ -47,9 +47,9 @@ if ble.active() == False:
 #-###
 #-###
 # -### create timers
-timer_schedule = machine.Timer(0)
-timer_work = machine.Timer(1)
-timer_check = machine.Timer(2)
+#timer_schedule = machine.Timer(0)
+timer_work = machine.Timer(0)
+timer_check = machine.Timer(1)
 
 #-###
 #-###
@@ -97,7 +97,7 @@ except:
     pass
 
 try:
-    mqtth = umqtt.MQTTClient(config2['mqtt_usr'], config2['mqtt_srv'], user=config2['mqtt_usr'], password=config2['mqtt_usr'], port=1883)
+    mqtth = umqtt.MQTTClient(config2['mqtt_usr'], config2['mqtt_srv'], user=config2['mqtt_usr'], password=config2['mqtt_pass'], port=1883)
     mqtth.keepalive = 180
     while mqtth.connect() == 1:
         time.sleep(0.5)
@@ -127,12 +127,12 @@ ble.config(gap_name=device_name)
 config = ''
 del config
 # a lot of garbage expected :D
-gc.collect()
 
 print('- ip', str( station.ifconfig()[0] ) )
 print('- time', ntptime.time() )
 print('- mqtt ping', str(time.ticks_ms() - mqtth.last_cpacket) )
 print('= booted')
 
+gc.collect()
 # -### BOOTED
 # -### end
