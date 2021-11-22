@@ -23,13 +23,30 @@ vglob['timework'] = time.time()
 vglob['timentp'] = 0
 vglob['timedisc'] = 0
 
-delaywork = 3
+delaywork = 3 # in seconds
+delayquery = 3 # in minutes
 
 # -#### global variables
 vglob_list = {}
 vwork_list = {}
 subscribe_list = []
 subscribe_list.append(config2['mqtt_eq3_in'])
+
+try:
+    wl = open('wl.txt', 'r')
+    vwork_temp = eval(str(wl.read()))
+    for jjj in vwork_temp:
+        vwork_list[jjj] = [None, time.time(), None, 8, [], None]
+        #mac = str( jjj[9:17].replace(":", "") )
+        mac = str(jjj.replace(":", "")[6:12])
+        subscribe_list.append(f'{config2['mqtt_eq3']}{mac}/radin/mode')
+        subscribe_list.append(f'{config2['mqtt_eq3']}{mac}/radin/temp')
+    del vwork_temp
+    wl.close()
+except Exception as e:
+    print('- load wl failed, setting default, this is ok ', e)
+    # if the above fails for whatever reason, start with clean white list
+    vwork_list['00:00:00:00:00:00'] = [None, time.time(), None, 8, [], None]
 
 #-####
 #-####
@@ -87,20 +104,30 @@ def fcode_addr(addr: str) -> bytes:
         result.append(int(str(iii), 16))
     return bytes(result)
 
-def fscan(duration: int = 10) -> None:
+def fscan(duration: int = 15) -> None:
     global vglob
-    print('- start scan')
+    global vwork_list
+    print('- scan start')
     vglob['timescan'] = time.time()
     #vwork_list['00:00:00:00:00:00'][0] = time.time() + 5
-    vwork_list['00:00:00:00:00:00'][1] = time.time() + 5
+    vwork_list['00:00:00:00:00:00'][1] = time.time()
+    #vwork_list['00:00:00:00:00:00'][1] -= 60
     if len( vwork_list['00:00:00:00:00:00'][4] ) > 0:
         # usually started from list, but in case of the first or manual scan catch error
         vwork_list['00:00:00:00:00:00'][4].pop(0)
+    ### delay other devices, for the a nice scan
+    ### ERRORs, but solved with time.time
+    for ffaddr in list(vwork_list):
+        #print( ffaddr, vwork_list[ffaddr][1] )
+        if ffaddr != '00:00:00:00:00:00':
+            vwork_list[ffaddr][1] = time.time() + int( duration * (2/3) )
+    ###
     ble.gap_scan(int(duration) * 1000, 50000, 30000, 1)
     #vwork_list['00:00:00:00:00:00'][4] = None
     return
 
 def fntp() -> None:
+    print('- set time ntp')
     vglob['timentp'] = time.time()
     ntptime.settime()
     return
@@ -115,22 +142,6 @@ def fntp() -> None:
 ####
 # definition of vwork_list
 # [ last_work, last_check, handle, status, work, work done - for devices sending a lot of ble ]
-
-try:
-    wl = open('wl.txt', 'r')
-    vwork_temp = eval(str(wl.read()))
-    for jjj in vwork_temp:
-        vwork_list[jjj] = [time.time(), time.time(), None, None, [], None]
-        #mac = str( jjj[9:17].replace(":", "") )
-        mac = str(jjj.replace(":", "")[6:12])
-        subscribe_list.append(f'{config2['mqtt_eq3']}{mac}/radin/mode')
-        subscribe_list.append(f'{config2['mqtt_eq3']}{mac}/radin/temp')
-    del vwork_temp
-    wl.close()
-except Exception as e:
-    print('- load wl failed, setting default, this is ok ', e)
-    # if the above fails for whatever reason, start with clean white list
-    vwork_list['00:00:00:00:00:00'] = [time.time(), time.time(), None, None, [], None]
 
 #-####
 #-####
@@ -209,8 +220,8 @@ def fble_irq(event, data) -> None:
     except Exception as e:
         print('-- fcheck wdt error, maybe not initialised ', e)
     # do not print scans, event 5
-    if event not in [5, 6, 18]:  # 17
-        print('- fbleirq ', event, ', ', list(data))
+    #if event not in [5, 6, 18]:  # 17
+    #    print('- fbleirq ', event, ', ', list(data))
     # ###
     if event == 5:  # _IRQ_SCAN_RESULT
         # ### scan results, and publish gathered addresses in vglob_list
@@ -344,10 +355,11 @@ def fble_irq(event, data) -> None:
             vwork_list[addrd][5] = msg_out
             # recache page only if something changed/sent
         ###
-        gc.collect()
+        #gc.collect()
     else:
         # catch some other ble connection values
         print('-- fbleirq unknown ble status')
+        #gc.collect()
     ###
     ###
     # no collect here, not to overload irq
@@ -364,7 +376,7 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
     # interruption when the message from mqtt arrives
     # this happens only if messages are previously requested
     print("- fmqttirq trigger")
-    global vwork
+    global vwork_list
     if type(msg) is bytes:
         msg = msg.decode()
     if type(topic) is bytes:
@@ -384,12 +396,13 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
     # -### new approach
     if topic in [config2['mqtt_eq3'] + str(mmm).replace(":", "")[6:12] + "/radin/temp" for mmm in vwork_list]:
         #vwork_list[worka[0]][4] = "settemp " + worka[1]
-        vwork_list[worka[0]][4].append( "settemp " + worka[1] ) # append instead of setting the value
-        print('--- fmqttirq work added temp')
+        workfin = "settemp " + worka[1]
+        if workfin not in vwork_list[worka[0]][4]: # do not double the work
+            vwork_list[worka[0]][4].append( "settemp " + worka[1] ) # append instead of setting the value
+            print('--- fmqttirq work added temp')
     elif topic in [config2['mqtt_eq3'] + str(mmm).replace(":", "")[6:12] + "/radin/mode" for mmm in vwork_list]:
         #vwork_list[worka[0]][4] = worka[1]
         print('--- fmqttirq work added mode')
-        pass
     elif worka[0] not in list(vwork_list):
         # if not the above, and the mac not in the list, then drop
         print('-- fmqttirq not on list')
@@ -401,11 +414,18 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
         #else:
         #vwork_list[worka[0]][4] = worka[1]
         ### adding manual, to the worklist normally
-        vwork_list[worka[0]][4].append( worka[1] ) #list
-        print('--- fmqttirq work added global')
+        workfin = worka[1]
+        if workfin not in vwork_list[worka[0]][4]: # do not double the work
+            vwork_list[worka[0]][4].append( worka[1] ) #list
+            print('--- fmqttirq work added global')
     else:
         print('-- fmqttirq irqbad message')
     # time.sleep(1)
+    ###
+    ### move back the clock so that this work will be done faster
+    vwork_list[worka[0]][1] -= 60
+    #except Exception as e:
+    #    print('-- fmqttirq work prio fail, paralel work')
     # ### if len 1, then scan and reset allowed
     # ### scan, adds scan to worklist, reset - resets immediately
     if len(worka) == 1:
@@ -461,8 +481,11 @@ def fworker(var=None) -> None:
     #print('- worker ', fworkout, ftimediff)
     ###
     ### if just rebooted, then change None with 8
-    if vwork_list[fworkout][3] == None:
-        vwork_list[fworkout][3] = 8
+    try:
+        if vwork_list[fworkout][3] == None:
+            vwork_list[fworkout][3] = 8
+    except Exception as e:
+        print('-- worker, this fails for unknown reason', e)
     ###
     # 4 is worklist, 2 is handle
     # change 39
@@ -560,7 +583,7 @@ def fworker(var=None) -> None:
         vwork_list[fworkout][5] = None
         # maybe not update, to do whole work in one run
         #vwork_list[fworkout][1] = time.time()
-        #
+        # select first from the work list
         worka = str(vwork_list[fworkout][4][0]).strip().split(' ')
         for iii in range(max(0, 2 - len(worka))):
             worka.append('')
@@ -655,6 +678,8 @@ async def loop_web(reader, writer) -> None:
     # ?
     #
     print('- f serving page ', requestfull)
+    global vglob
+    global vglob_list
     request = requestfull[0]
     #print(request, requestfull)
     requestval = ''
@@ -698,7 +723,7 @@ Connection: close
                 vwebpage += '<a href="/wlistdo?' + str(iii[0]) + '">add</a> ' + str(iii[0]) + ' ' + \
                     '{: >{w}}'.format(str(time.time() - iii[1][3]), w=5) + ' ' + str(iii[1][1]) + ' ' + str(iii[1][2]) + '\n'
         else:
-            vwebpage = '<pre>empty list</pre>\n'
+            vwebpage = '<pre>empty list\n'
         ###
         vwebpage += '\n\n'
         vwebpage += 'MAC remove white listed\n'
@@ -737,7 +762,7 @@ Added or removed """ + str(requestval) + """.
             requestval = str(requestval)[0:17]
             del vwork_list[str(requestval)]
         else:
-            vwork_list[str(requestval)] = [None, time.time(), None, None, None, None]
+            vwork_list[str(requestval)] = [None, time.time(), None, 8, [], None]
         filewl = open('wl.txt', 'w')
         filewl.write(str(list(vwork_list)))
         filewl.close()
@@ -798,7 +823,7 @@ Dir: """ + str(os.listdir()) + """
 
 Current work: """ + str(vglob) + """
 
-Details:\n""" +  "\n".join( [ str(aaa) for aaa in vwork_list.items() ][0] ) + """
+Details:\n""" +  "\n".join( [ str(aaa) for aaa in vwork_list.items() ] ) + """
 
 Status: """ + status + """
 
@@ -904,8 +929,10 @@ Connection: close
     #####
     #####
     elif request == "/otado":
-        vwebpage = ""
-        gc.collect()
+        vwebpage = ''
+        #vglob = ''
+        vglob_list = {}
+        #gc.collect()
         # s.setblocking(0)
         header = """HTTP/1.1 302 Found
 Content-Length: 0
@@ -914,6 +941,8 @@ Connection: close
 
 """
         # =
+        ble.active(False)
+        gc.collect()
         #headerin = conn.recv(500).decode()
         headerin = await reader.read(500)
         # print(headerin)
@@ -988,7 +1017,8 @@ Connection: close
         #print( namein )
         #print( lenin )
         dataaa = ''
-        # gc.collect()
+        ble.active(True)
+        #gc.collect()
     #####
     #####
     elif request == "/reset":
@@ -1110,18 +1140,19 @@ def fcheck(var=None) -> None:
         fmqtt_recover()
         return
     ###
-    ### remove addresses older than 21 minutes (was 2 hours)
+    ### remove addresses older than x minutes
     #last_contact = 9999
+    # this concerns vglob_list and not vwork_list
     for addr, val in vglob_list.items():
-        if time.time() - val[3] > 16 * 60:
+        if time.time() - val[3] > 20 * 60:
             vglob_list.pop(addr)
     ###
     ### check ntp every 24 hours
     if time.time() - vglob['timentp'] > 24 * 60 * 60:
         fntp()
     ###
-    ### check autodiscovery every 1 hours
-    if time.time() - vglob['timedisc'] > 1 * 60 * 60:
+    ### check autodiscovery every 6 hours
+    if time.time() - vglob['timedisc'] > 6 * 60 * 60:
         fdisc()
     ###
     ### if 5 minutes from the last contact, then scan
@@ -1142,11 +1173,11 @@ def fcheck(var=None) -> None:
     for addr, val in vwork_list.items():
         # check if not connected [2] == None
         # possible to check if no work [4] == None
-        if time.time() - val[0] > 2 * 60 and val[2] == None and addr.replace(":", "")[0:6] == '001A22':
+        if time.time() - val[1] > delayquery * 60 and val[2] == None and addr.replace(":", "")[0:6] == '001A22':
             if len( vwork_list[addr][4] ) == 0:
                 vwork_list[addr][4].append( 'manual' )
             #vwork_list['00:00:00:00:00:00'][1] = time.time()
-        if time.time() - val[0] > 2 * 60 and val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
+        if time.time() - val[1] > delayquery * 60 and val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
             if len( vwork_list[addr][4] ) == 0:
                 vwork_list[addr][4].append( 'gettemp' )
             #vwork_list['00:00:00:00:00:00'][1] = time.time()
@@ -1164,6 +1195,7 @@ def fcheck(var=None) -> None:
 
 def fdisc() -> None:
     ###
+    print('- send mqtt autodiscovery')
     ### home assistant auto discovery
     ### discovery topic should be retained
     #print("publishing mqtt autodiscovery")
@@ -1292,8 +1324,9 @@ timer_check.init(period=(1 * 60 * 1000), callback=fcheck)
 #-####
 #-####
 # -#### first scan, longer
+#fdisc()
+#fntp()
 fscan(60)
-#ble.gap_scan(60 * 1000, 50000, 30000, 1)
 
 #WDT
 # do not move this to boot
