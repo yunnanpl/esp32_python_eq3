@@ -23,6 +23,19 @@ The syntax is still simpler than esp32_mqtt_eq3.
 
 Serial or WebREPL can be used. THere are some useful functions on the device.
 
+## Installation
+No compilation is needed, just flash micropython and upload the files as described below.
+
+ - first download micropython binary from here https://micropython.org/download/
+ - very probably you need the common esp32 binary (https://micropython.org/download/esp32/)
+ - fill out the secret_cfg.py file
+ - flash it with your favourite flasher using serial connection, or usb-serial connection (if available)
+   - for example with esptool - following the instruction on the micropython download page
+ - now, you need to upload the files (4 files) from the code directory
+   - It can be done with webrepl or ampy
+   - webrepl does not require any special installation, but it need to be activated on micropython (through serial connection)
+   - ampy requires that you have python installed, and can be installed with pip
+
 ## Tests
 After 10 days, 4 ESP32 are running stable. No signal or command lost (none noticed).
 
