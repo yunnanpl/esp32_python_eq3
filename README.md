@@ -36,6 +36,11 @@ No compilation is needed, just flash micropython and upload the files as describ
    - webrepl does not require any special installation, but it need to be activated on micropython (through serial connection)
    - ampy requires that you have python installed, and can be installed with pip
 
+## Updates
+Updates can be uploaded OTA (over the air), so the device does not have to be physically connected to the PC for the update.
+If the main.py fails, then it can be always updated with webrepl.
+The only danger is while updating the boot.py or secret_cfg.py, as if there is an error, the webrepl will not start... then the update has to be done with a cable. Still, I try not to upload not working releases ;D
+
 ## Tests
 After 10 days, 4 ESP32 are running stable. No signal or command lost (none noticed).
 
