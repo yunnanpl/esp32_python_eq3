@@ -1,7 +1,10 @@
 # esp32_python_eq3
 Bluetooth bridge between eqiva EQ3 thermostat and WLAN network, using ESP32, micropython and mqtt.
 
-https://www.eq-3.de/produkte/eqiva/detail/bluetooth-smart-heizkoerperthermostat.html
+ - INSTRUCTION https://github.com/yunnanpl/esp32_python_eq3/blob/master/INSTRUCTION.md
+ - CHANGELOG https://github.com/yunnanpl/esp32_python_eq3/blob/master/CHANGELOG.md
+
+ - https://www.eq-3.de/produkte/eqiva/detail/bluetooth-smart-heizkoerperthermostat.html
 
 # Idea
 I used a lot of other solutions, but it seemed to be not stable for me, or hard to extend (for me :)).
