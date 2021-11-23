@@ -27,7 +27,13 @@ The syntax is still simpler than esp32_mqtt_eq3.
 Serial or WebREPL can be used. THere are some useful functions on the device.
 
 ## Tests
-After 10 days, 4 ESP32 are running stable. No signal or command lost (none noticed).
+The aim is stability.
+Test system is 4 ESP32 controlling 9 EQ3 (and reading out 2 thermometers).
+Anything can happen: Battery on EQ3 runs out. BLE packets get corrupted, etc... WLAN breaks, MQTT server dies, bad work is sent... DDOS happens...
+I tried to pick up all imaginable errors. I do up to 1800 queries daily (every 2-3 minutes), and send 10-50 commands.
+At best, the device should never loose work, even if it is forced sometimes to reboot.
+
+Tests with newest version... running.
 
 ## Features (and anti-features)
  - NEW basic webpage added
