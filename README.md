@@ -23,52 +23,8 @@ The syntax is still simpler than esp32_mqtt_eq3.
 
 Serial or WebREPL can be used. THere are some useful functions on the device.
 
-## Installation
-No compilation is needed, just flash micropython and upload the files as described below.
-
- - first download micropython binary from here https://micropython.org/download/
- - very probably you need the common esp32 binary (https://micropython.org/download/esp32/)
- - fill out the secret_cfg.py file
- - flash it with your favourite flasher using serial connection, or usb-serial connection (if available)
-   - for example with esptool - following the instruction on the micropython download page
- - now, you need to upload the files (4 files) from the code directory
-   - It can be done with webrepl or ampy
-   - webrepl does not require any special installation, but it need to be activated on micropython (through serial connection)
-   - ampy requires that you have python installed, and can be installed with pip
-
-## Updates
-Updates can be uploaded OTA (over the air), so the device does not have to be physically connected to the PC for the update.
-If the main.py fails, then it can be always updated with webrepl.
-The only danger is while updating the boot.py or secret_cfg.py, as if there is an error, the webrepl will not start... then the update has to be done with a cable. Still, I try not to upload not working releases ;D
-
 ## Tests
 After 10 days, 4 ESP32 are running stable. No signal or command lost (none noticed).
-
-## Shell
-It is possible to connect to shell of MicroPython for some extra functionality.
-For this, it is reasonable to setup and use WebREPL, to issue commands and upgrade scripts remotely.
-http://micropython.org/webrepl/
-
-There are internal functions (not really necessary, as there is a webpage now):
- - fprint()
-   - to cleanly print all visible clients (if not visible, removed after 2 hours)
- - fclean()
-   - triggers cleaning
- - fble_scan()
-   - triggers BLE scan, if triggered from console, it is longer than automatic one
- - (time.ticks_ms()/1000/60/60/24)
-   - prints uptime in days
-   - this will be cleaned up
-
-and variables:
- - vglob
-   - global work settings
-   - if status is 8, then waiting, otherwise working
- - vglob_list
-   - variable with list of visible clients
-   - this can be printed nicely with fprint()
- - vwork
-   - work list, it is usually empty
 
 ## Features (and anti-features)
  - NEW basic webpage added
@@ -97,27 +53,6 @@ and variables:
    - https://github.com/micropython/micropython/pull/6651
  - add white-list and black-list to enforce or ignore some devices
  - maybe - add temperature history and eq3 setting history graph
-
-# Changes
- - new
-   + webpage is running on async instead of sockets now
-   + some basic work was done to add enforced device discovery and mqtt messages for home assistant auto-configuration
-   + added basic OTA !!!
-     + files can be uploaded and removed from ESP through the page (will be documented soon)
-     + works for any text file, does not work for binary files yet...
-   + removed necessity of webrepl to save memory
-     + webrepl can be switched on and off through the webpage
-   + improved web/sessions - more responsive
-   + improved links (upload and reset requires confirmation)
-   + added more clear descriptions
- - old 
-   + added basic webpage
-   + fixed memory overrun due to webpage generation
-   + saved memory where I could
-   + precompiled the external libraries to save memory and space (simple2.py and robust2.py)
-     + not sure if those are really necessry, as the "unsubscription" error happened and no error was raised
-   + cleaned up BLE names (still, maybe due to transmission issues, some look unusual)
-   + removing unseen devices after 1 hour (and not 2 hours as before) (every 10 minutes the device is scanning for new BLE) 
 
 # References
 
