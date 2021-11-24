@@ -33,10 +33,14 @@
      - now there are 3 retries in a row, and then it moves to the next work
    - BUG: there was a 1 second slot, in which the old work was done, and new work could be added, and quickly deleted by the previous deletion request
      - this cannot happen now, as there is a work list
-   - BUT: whitelisted devices could not be removed from GUI
+   - BUG: whitelisted devices could not be removed from GUI
      - now possible
-   - BUT Theoretical: If the connections will be so fast, and amount of the EQ3s larger than 6-7, then all BLE connections will be saturated, and it is not known what will happen
+   - BUG Theoretical: If the connections will be so fast, and amount of the EQ3s larger than 6-7, then all BLE connections will be saturated, and it is not known what will happen
      - now, if 4 simultanuous connections are opened, then ESP32 is waiting for done connections to be closed, before opening new
+   - BUG: Thermometer readout timer was reset so often, that the real readout never happened (as it was always "just done")
+     - fixed
+   - BUG: NTP and Autodiscovery were done every few minutes, as the work timer was not set correctly (NTP every 24 hours, Autodiscovery every 6 hours)
+     - fixed
    - ISSUE: worklist could consist of multiple equal commands, which makes no sense
      - now if equal command exists in the list, it is dropped, except this, no other commands are dropped
    - ISSUE: flooding web connections could comsume all the RAM and lead to reboot
