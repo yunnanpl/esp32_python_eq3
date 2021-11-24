@@ -28,12 +28,17 @@ Serial or WebREPL can be used. THere are some useful functions on the device.
 
 ## Tests
 The aim is stability.
-Test system is 4 ESP32 controlling 9 EQ3 (and reading out 2 thermometers).
+Test system is 4 ESP32 controlling 9 EQ3 (around 2 EQ3 for each ESP32 and reading out 2 thermometers).
 Anything can happen: Battery on EQ3 runs out. BLE packets get corrupted, etc... WLAN breaks, MQTT server dies, bad work is sent... DOS happens...
 I tried to pick up all imaginable errors. I do up to 700 queries daily (every 2-3 minutes), and send 10-50 commands.
 At best, the device should never loose work, even if it is forced sometimes to reboot.
 
-Tests with newest version... running.
+Tests with newest version... 
+ - 48h, 1400 queries, 30 commands for each of EQ3, configuration as written above -> no issues
+ - further testing
+
+It seems that RSSI above -90 leads to issues with connection. It will connect, but after a few tries.
+Below -90 it works without any issues.
 
 ## Features (and anti-features)
  - NEW basic webpage added
@@ -52,7 +57,6 @@ Tests with newest version... running.
  - add other temperature sensors like Mijia, BME280, etc.
  - add PID regulator for automatic temperature regulation
    - in case of real temperature input
- - add automatic integration in home assistant (yes, I am using hass :D).
  - add other basic info, like battery, mode, etc.
  - add offset setting, both in eq3 and "external" through esp32
  - think about adding support for the new firmware version of eq3 (later :D)
@@ -60,7 +64,6 @@ Tests with newest version... running.
    - https://github.com/rytilahti/python-eq3bt/issues/41
    - and micropython ble seems to support pairing already
    - https://github.com/micropython/micropython/pull/6651
- - add white-list and black-list to enforce or ignore some devices
  - maybe - add temperature history and eq3 setting history graph
 
 # References
