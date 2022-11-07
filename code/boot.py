@@ -5,7 +5,7 @@
 
 #-###
 #-###
-# -### imports, also config and settings
+# -### imports, also CONFIG and settings
 #
 import uasyncio as asyncio
 import _thread
@@ -21,7 +21,7 @@ import os
 from secret_cfg import *
 # speedup/slow down for energy saving :)
 import machine
-machine.freq(config['freq'])
+machine.freq(CONFIG['freq'])
 #
 # import re
 # import robust2 as umqtt
@@ -36,6 +36,20 @@ machine.freq(config['freq'])
 # import math
 
 gc.enable()
+
+#-###
+#-### CONFIG compatibility
+# moving variable to list of permanent variables, in order to query ntp sometimes
+# and not to change CONFIG
+try:
+    CONFIG2['mqtt_thermo_src'] = CONFIG2['mqtt_temp_src']
+except:
+    pass
+
+try:
+    CONFIG2['ntp_host'] = CONFIG['ntp_host']
+except:
+    pass
 
 #-###
 #-###
@@ -57,9 +71,9 @@ timer_check = machine.Timer(1)
 try:
     station = network.WLAN(network.STA_IF)
     station.active(True)
-    # station.connect( config['wifi_name'], binascii.a2b_base64( config['wifi_pass'] ) )
-    # config['wifi_name'] = "asdasd"
-    station.connect(config['wifi_name'], "".join([chr(x) for x in config['wifi_pass']]))
+    # station.connect( CONFIG['wifi_name'], binascii.a2b_base64( CONFIG['wifi_pass'] ) )
+    # CONFIG['wifi_name'] = "asdasd"
+    station.connect(CONFIG['wifi_name'], "".join([chr(x) for x in CONFIG['wifi_pass']]))
 except:
     pass
 
@@ -69,8 +83,8 @@ except:
 while station.isconnected() == False:
     # print('LOG waiting for connection')
     time.sleep(0.5)  # sleep or pass
-    # if not conencted in 10 sec, then restart
-    if time.ticks_ms() > 10000:
+    # if not conencted in 15 sec, then restart
+    if time.ticks_ms() > 15000:
         print('- no WIFI -> reset')
         machine.reset()
 
@@ -78,10 +92,7 @@ while station.isconnected() == False:
 #-###
 # -### getting ntp time
 try:
-    # moving variable to list of permanent variables, in order to query ntp sometimes
-    # and not to change config
-    config2['ntp_host'] = config['ntp_host']
-    ntptime.host = config2['ntp_host']
+    ntptime.host = CONFIG2['ntp_host']
     ntptime.settime()
 except:
     pass
@@ -97,12 +108,12 @@ except:
     pass
 
 try:
-    mqtth = umqtt.MQTTClient(config2['mqtt_usr'], config2['mqtt_srv'], user=config2['mqtt_usr'], password=config2['mqtt_pass'], port=1883)
+    mqtth = umqtt.MQTTClient(CONFIG2['mqtt_usr'], CONFIG2['mqtt_srv'], user=CONFIG2['mqtt_usr'], password=CONFIG2['mqtt_pass'], port=1883)
     mqtth.keepalive = 180
     while mqtth.connect() == 1:
         time.sleep(0.5)
-        # if not conencted in 15 sec, then restart
-        if time.ticks_ms() > 15000:
+        # if not conencted in 20 sec, then restart
+        if time.ticks_ms() > 20000:
             print('- no MQTT -> reset')
             machine.reset()
     mqtth.ping()
@@ -116,23 +127,24 @@ except:
 #-### some other settings
 
 # ble.config(rxbuf=256)
-ble.config(rxbuf=512)
-ble.config(mtu=515)
+#ble.config(rxbuf=512)
+#ble.config(mtu=515)
 # ble.config(gap_name=b'ESP32_5')
 #ble.config( gap_name='ESP32_'+str(ble.config('mac')[1][5]))
 device_name = 'ESP32_' + str(station.ifconfig()[0].split('.')[3])
 ble.config(gap_name=device_name)
 
 # -### clean up the memory and stuff
-config = ''
-del config
+CONFIG = ''
+del CONFIG
 # a lot of garbage expected :D
 
-print('- ip', str( station.ifconfig()[0] ) )
-print('- time', ntptime.time() )
-print('- mqtt ping', str(time.ticks_ms() - mqtth.last_cpacket) )
-print('= booted')
+print('= ip', str( station.ifconfig()[0] ) )
+print('= time', ntptime.time() )
+print('= mqtt ping', str(time.ticks_ms() - mqtth.last_cpacket) )
+print('+ booted')
 
 gc.collect()
+gc.threshold(40000) # ???
 # -### BOOTED
 # -### end

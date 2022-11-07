@@ -9,46 +9,42 @@ add other temperature sensors
 """
 
 # ### define global variables
-vglob = {}
-#vglob['addr'] = ''
-#vglob['handle'] = ''
-vglob['status'] = 8  # 8=disconnected
-#vglob['result'] = 0
-#vglob['work'] = ''
-#vglob['data'] = ''
-#vglob['time'] = time.time()
-vglob['timescan'] = time.time()
-vglob['timeup'] = time.time()
-vglob['timelast'] = time.time()
-vglob['timework'] = time.time()
-vglob['timentp'] = 0
-vglob['timedisc'] = 0
+VGLOB = {}
+VGLOB['status'] = 8  # 8=disconnected
+VGLOB['timescan'] = time.time()
+VGLOB['timeup'] = time.time()
+VGLOB['timelast'] = time.time()
+VGLOB['timework'] = time.time()
+VGLOB['timecheck'] = time.time()
+VGLOB['timentp'] = 0
+VGLOB['timedisc'] = 0
 
-delaywork = 4 # in seconds
-delayquery = 2 # in minutes
-delaycheck = 1 # in minutes
+# time between 2-5 is fine
+VGLOB['delaywork'] = 5 # in seconds
+VGLOB['delayquery'] = 2 # in minutes
+VGLOB['delaycheck'] = 1 # in minutes
 
 # -#### global variables
-vglob_list = {}
-vwork_list = {}
-mqtt_subscribe_list = []
-mqtt_subscribe_list.append(config2['mqtt_eq3_in'])
+VSCAN_LIST = {}
+VWORK_LIST = {}
+VMQTT_SUB_LIST = []
+VMQTT_SUB_LIST.append( CONFIG2['mqtt_eq3_in'] )
 
 try:
     wl = open('wl.txt', 'r')
     vwork_temp = eval(str(wl.read()))
-    for jjj in vwork_temp:
-        vwork_list[jjj] = [None, time.time(), None, 8, [], None]
+    for jjj, val in vwork_temp.items():
+        VWORK_LIST[jjj] = [val[0], time.time() + 60, None, 8, [], None]
         #mac = str( jjj[9:17].replace(":", "") )
         mac = str(jjj.replace(":", "")[6:12])
-        mqtt_subscribe_list.append(f'{config2['mqtt_eq3']}{mac}/radin/mode')
-        mqtt_subscribe_list.append(f'{config2['mqtt_eq3']}{mac}/radin/temp')
+        VMQTT_SUB_LIST.append(f'{CONFIG2['mqtt_eq3']}{mac}/radin/mode')
+        VMQTT_SUB_LIST.append(f'{CONFIG2['mqtt_eq3']}{mac}/radin/temp')
     del vwork_temp
     wl.close()
 except Exception as e:
     print('- load wl failed, setting default, this is ok ', e)
     # if the above fails for whatever reason, start with clean white list
-    vwork_list['00:00:00:00:00:00'] = [None, time.time(), None, 8, [], None]
+    VWORK_LIST['00:00:00:00:00:00'] = ["system", time.time() + 60, None, 8, [], None]
 
 #-####
 #-####
@@ -77,15 +73,15 @@ def fnow(nowtime: int = 0, ttt: str = "s"):
 
 def ffind_handle(handle: int) -> str:
     # get addr of the handle
-    global vwork_list
-    for val, iii in vwork_list.items():
+    #global VWORK_LIST
+    for val, iii in VWORK_LIST.items():
         if iii[2] == handle:
             return str(val)
 
 def ffind_status(status: int = 7) -> str:
     # get addr of the connected state
-    global vwork_list
-    for val, iii in vwork_list.items():
+    #global VWORK_LIST
+    for val, iii in VWORK_LIST.items():
         if iii[3] == status:
             return str(val)
     # else
@@ -107,43 +103,54 @@ def fcode_addr(addr: str) -> bytes:
     return bytes(result)
 
 def fscan(duration: int = 15) -> None:
-    global vglob
-    global vwork_list
+    global VGLOB
+    global VWORK_LIST
     print('= scan start')
-    vglob['timescan'] = time.time()
-    #vwork_list['00:00:00:00:00:00'][0] = time.time() + 5
-    vwork_list['00:00:00:00:00:00'][1] = time.time()
-    #vwork_list['00:00:00:00:00:00'][1] -= 60
-    if len( vwork_list['00:00:00:00:00:00'][4] ) > 0:
+    VGLOB['timescan'] = time.time()
+    VWORK_LIST['00:00:00:00:00:00'][1] = time.time()
+    if len( VWORK_LIST['00:00:00:00:00:00'][4] ) > 0:
         # usually started from list, but in case of the first or manual scan catch error
-        vwork_list['00:00:00:00:00:00'][4].pop(0)
+        VWORK_LIST['00:00:00:00:00:00'][4].pop(0)
     ### delay other devices, for the a nice scan
     ### ERRORs, but solved with time.time
-    for ffaddr in list(vwork_list):
-        #print( ffaddr, vwork_list[ffaddr][1] )
-        #vglob['timework'] = time.time() + int( duration * (2/3) )
+    for ffaddr in list(VWORK_LIST):
+        #print( ffaddr, VWORK_LIST[ffaddr][1] )
+        #VGLOB['timework'] = time.time() + int( duration * (2/3) )
         if ffaddr != '00:00:00:00:00:00':
-            vwork_list[ffaddr][1] = time.time() + int( duration * (2/3) )
+            VWORK_LIST[ffaddr][1] = time.time() + int( duration * (2/3) )
     ###
-    ble.gap_scan(int(duration) * 1000, 50000, 30000, 1)
-    #vwork_list['00:00:00:00:00:00'][4] = None
+    try:
+        ble.gap_scan(int(duration) * 1000, 50000, 30000, 1)
+    except Exception as e:
+        print('= scan already running ', e)
+    #VWORK_LIST['00:00:00:00:00:00'][4] = None
     return
 
 def fntp() -> None:
     print('= set time ntp')
-    vglob['timentp'] = time.time()
+    VGLOB['timentp'] = time.time()
     ntptime.settime()
     return
 
+def faddwork() -> None:
+    # function for adding work
+    # should check where to add the work, and if this or similar work exists
+    # if the work makes sense
+    pass
+
+def fdisconnect() -> None:
+    # disconnect and clean up, with all error catching etc
+    pass
+
 #def fprint() -> None:
-#    for addr, val in vwork_list:
+#    for addr, val in VWORK_LIST:
 #        print('== ', str(addr), ' - ', str(val))
 
 #-####
 #-####
 # -#### load white lists
 ####
-# definition of vwork_list
+# definition of VWORK_LIST
 # [ last_work, last_check, handle, status, work, work done - for devices sending a lot of ble ]
 
 #-####
@@ -152,39 +159,40 @@ def fntp() -> None:
 
 def fble_write(addr: str, data1: str, data2: str='') -> None:
     # writer triggered in fget_work, and results in ble irqs
-    global vglob
-    global vglob_list
-    global vwork
-    global vwork_list
+    # maybe no global for writing needed
+    #global VGLOB
+    #global VSCAN_LIST
+    #global VWORK_LIST
     #print('- fble_write - ', str(addr), str(data1))
     # ### main loop
     # ### try connection 20 times, if succesful stop the loop
     print("= fblew work")
+    mac_type = str(addr.replace(":", "")[0:6])
     #print( str(addr), str(data1), str(data2) )
-    #print( str(vglob['addr']), str(vglob['work']) )
-    if (addr[0:8] == '4C:65:A8' or addr[0:8] == 'A4:C1:38') and data1 == 'gettemp':
+    #print( str(VGLOB['addr']), str(VGLOB['work']) )
+    if (mac_type == '4C65A8' or mac_type == 'A4C138') and data1 == 'gettemp':
         data1 = 0x10
         data2 = b'\x01\x00'
-    elif addr[0:8] == '00:1A:22' and data1 == 'settemp' and (str(data2).split('.')[0]).isdigit():
+    elif mac_type == '001A22' and data1 == 'settemp' and (str(data2).split('.')[0]).isdigit():
         data1 = 0x0411
-        if float(data2) > 28:
-            data2 = 28
-        if float(data2) < 12:
-            data2 = 12
+        if float(data2) > 29.5:
+            data2 = 29.5
+        if float(data2) < 5:
+            data2 = 5
         data2 = '\x41' + chr(int(round(2 * float(data2))))
-    elif addr[0:8] == '00:1A:22' and data1 == 'manual':
+    elif mac_type == '001A22' and data1 == 'manual':
         data1 = 0x0411
         data2 = '\x40\x40'
     # ### if no issue with above
     # ### and variables cleaned, try to write
     try:
-        fhandle = vwork_list[addr][2]
-        #ble.gattc_write(vglob['handle'], data1, data2, 1)
+        fhandle = VWORK_LIST[addr][2]
+        #ble.gattc_write(VGLOB['handle'], data1, data2, 1)
         ble.gattc_write(fhandle, data1, data2, 1)
         print('= fblew write')
         # for jjj in range(60):
         #    #print('--- wait for connect')
-        #    f vglob['status'] != 8:
+        #    f VGLOB['status'] != 8:
         #        continue
         #    time.sleep(0.5)
     except Exception as e:
@@ -192,14 +200,15 @@ def fble_write(addr: str, data1: str, data2: str='') -> None:
     #
     # ### if loop ended or break then try to disconnect, set status to disconnected
     # 31 add
-    gc.collect()
     # ?
     try:
         # if run as thread, then stop thread
         _thread.exit()
+        #pass
     except Exception as e:
         # if this fails, there is no reason to panic, function not in thread
         print('- fblew close thread:', e)
+    gc.collect()
     return
 
 #-####
@@ -210,42 +219,58 @@ def fble_write(addr: str, data1: str, data2: str='') -> None:
 def fble_irq(event, data) -> None:
     # interrupt triggered by ble
     # usually only if connection is processed
-    global vwork_list
-    global vglob_list
-    global vglob
+    global VWORK_LIST
+    global VSCAN_LIST
+    global VGLOB
     #global vwebpage
     #global vwork_status
     # ### get event variable and publish global so other threads react as needed
-    vglob['status'] = event
+    VGLOB['status'] = event
     #print( "f ble irq", event)
     try:
         wdt.feed()
     except Exception as e:
-        print('- fbleirq wdt error, maybe not initialised ', e)
+        print('- fbleirq wdt error, maybe not yet initialised ', e)
     # do not print scans, event 5
     #if event not in [5, 6, 18]:  # 17
     #    print('- fbleirq ', event, ', ', list(data))
     # ###
     if event == 5:  # _IRQ_SCAN_RESULT
-        # ### scan results, and publish gathered addresses in vglob_list
+        # ### scan results, and publish gathered addresses in VSCAN_LIST
         addr_type, addr, adv_type, rssi, adv_data = data
         # special case for presence sensors with FF:FF addresses
-        addr_decode = str(fdecode_addr(addr))
-        if bytes(addr)[0:2] == b'\xff\xff' and adv_type == 0:
+        addrd = str(fdecode_addr(addr))
+        mac = str(addrd.replace(":", "")[6:12])
+        mac_type = str(addrd.replace(":", "")[0:6])
+        #print('+ fbleirq ', addrd, addr_type, adv_type)
+        ###
+        ### this has to before rewriting last seen time
+        if addrd in VWORK_LIST and addrd in VSCAN_LIST:
+            if mac_type[0:4] == 'FFFF' and time.time() > VSCAN_LIST[addrd][3] + 5:
+                #print('-- fbleirq ', addrd, bytes(adv_data))
+                #msg_out = '{"id":"' + mac + '","name":"tracker' + mac + '","location":"'+ str(CONFIG2['mqtt_usr']) +'","timestamp":' + str(time.time()) + '}'
+                #msg_out = '{"id":"' + mac + '","name":"tracker' + mac + '","location":"'+ str(CONFIG2['mqtt_usr']) +'" }'
+                msg_out = '{"payload":"' + str(CONFIG2['mqtt_usr']) + '", "location":"'+ str(CONFIG2['mqtt_usr']) +'" }'
+                topic_out = CONFIG2['mqtt_presence'] + mac + '/radout/status'
+                mqtth.publish(topic_out, bytes(msg_out, 'ascii'))
+        #        #VSCAN_LIST[addrd][3] = time.time()
+        ###
+        if mac_type[0:4] == 'FFFF' and adv_type == 0:
             adv_type = 4
             # this has to be like this, to pass through the cleaner later
             adv_data = b'__Tracker'
-        # only full detections, with names, so adv_type == 4
+        ### only full detections, with names, so adv_type == 4
         if adv_type == 4:
             #print( str(bytes(adv_data)[2:24].split(b'\xff')[0] ) )
-            vglob_list[addr_decode] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:22].split(b'\xff')
+            VSCAN_LIST[addrd] = [bytes(addr), rssi, bytes((x for x in bytes(adv_data)[2:22].split(b'\xff')
                                                                  [0] if x >= 0x20 and x < 127)).decode("ascii").strip(), time.time()]
-        else:
-            pass
-            # return
+        ### here actions for addresses in the list
+        #else:
+        #    pass
+        # return
         # debug temp
-        if addr_decode[0:8] == '4C:65:A8' or addr_decode == 'A4:C1:38':
-            pass
+        #if addr_decode[0:8] == '4C:65:A8' or addr_decode == 'A4:C1:38':
+        #    pass
         #    print( "-- irq temp ", addr_decode, list( bytearray( adv_data ) ) )
         # clean after each new result
     elif event == 6:  # _IRQ_SCAN_DONE
@@ -253,10 +278,10 @@ def fble_irq(event, data) -> None:
         # ### scan done and cleanup, reseting variables as needed
         # 31 added
         # time.sleep(1)
-        vglob['status'] = 8
-        #vglob['result'] = 0
+        VGLOB['status'] = 8
+        #VGLOB['result'] = 0
         # new
-        #vwork_list['00:00:00:00:00:00'][4] = []
+        #VWORK_LIST['00:00:00:00:00:00'][4] = []
         print('= fbleirq scan done')
         # gc.collect()
     elif event == 7:  # _IRQ_PERIPHERAL_CONNECT
@@ -265,97 +290,105 @@ def fble_irq(event, data) -> None:
         addrd = fdecode_addr(addr)
         #print( addrd )
         # do not change the time with connect, but only disconnect
-        #vwork_list[ addrd ][1] = time.time()
-        vwork_list[addrd][1] = time.time()
-        vwork_list[addrd][2] = handle
-        vwork_list[addrd][3] = event
+        #VWORK_LIST[ addrd ][1] = time.time()
+        VWORK_LIST[addrd][1] = time.time()
+        VWORK_LIST[addrd][2] = handle
+        VWORK_LIST[addrd][3] = event
     elif event == 8:  # _IRQ_PERIPHERAL_DISCONNECT
         # ### disconnected 8, do actions
         handle, addr_type, addr = data
         addrd = fdecode_addr(addr)
-        #vglob['handle'] = handle
+        #VGLOB['handle'] = handle
         # DONE
         # update the time of the original address too
         #addrdo = ffind_handle(handle)
         #print( addrd, handle, addrdo )
-        #vwork_list[ addrdo ][1] = time.time()
+        #VWORK_LIST[ addrdo ][1] = time.time()
         # TODO
         # if disconnected from handle, with address 00, then the device is out of range
         # try later, so update the timer
         # INFO the above does not work so well ;D
         ###
         # remove the handle
-        #vwork_list[addrd][0] = time.time()
-        vwork_list[addrd][1] = time.time()
-        vwork_list[addrd][2] = None  # this is handle
-        vwork_list[addrd][3] = event
-        vwork_list[addrd][5] = None
+        #VWORK_LIST[addrd][0] = time.time()
+        VWORK_LIST[addrd][1] = time.time()
+        VWORK_LIST[addrd][2] = None  # this is handle
+        VWORK_LIST[addrd][3] = event
+        VWORK_LIST[addrd][5] = None
         # written, so remove from work list
         # only in response obtained 18
-        #vwork_list[ addrd ][4] = []
+        #VWORK_LIST[ addrd ][4] = []
         # for mijia
         # 20211109 new
-        #vglob['addr'] = ''
-        vglob['timelast'] = time.time()
-        #vglob['work'] = ''
+        #VGLOB['addr'] = ''
+        VGLOB['timelast'] = time.time()
+        #VGLOB['work'] = ''
         # gc.collect()
     elif event == 17:  # 17 _IRQ_GATTC_WRITE_DONE
         # ### write to device
         handle, value_handle, status = data
         addrd = ffind_handle(handle)
         # update work times, but do not remove work list (until response)
-        vwork_list[addrd][1] = time.time()
-        vwork_list[addrd][3] = event
+        VWORK_LIST[addrd][1] = time.time()
+        VWORK_LIST[addrd][3] = event
         ###
-        #vglob['handle'] = handle
-        #vglob['result'] = 4
+        #VGLOB['handle'] = handle
+        #VGLOB['result'] = 4
     elif event == 18:  # _IRQ_GATTC_NOTIFY
         # ### getting ble notification irq
         handle, value_handle, notify_data = data
         addrd = ffind_handle(handle)
-        vwork_list[addrd][1] = time.time()
-        vwork_list[addrd][3] = event
+        VWORK_LIST[addrd][1] = time.time()
+        VWORK_LIST[addrd][3] = event
         # written, so remove from work list
-        #vwork_list[addrd][4] = None
-        if len( vwork_list[addrd][4] ) > 0:
-            vwork_list[addrd][4].pop(0) # pop first value from the list, if written correctly
-        #vwork_list[ addrd ][5] = notify_data
+        #VWORK_LIST[addrd][4] = None
+        if len( VWORK_LIST[addrd][4] ) > 0:
+            VWORK_LIST[addrd][4].pop(0) # pop first value from the list, if written correctly
+        #VWORK_LIST[ addrd ][5] = notify_data
         ###
         msg_out = None
         ###
         ###
-        #vglob['data'] = notify_data
-        #vglob['addr'] = addrd
-        mac = str(addrd[9:17].replace(":", ""))
+        #VGLOB['data'] = notify_data
+        #VGLOB['addr'] = addrd
+        #mac = str(addrd[9:17].replace(":", ""))
+        mac = str(addrd.replace(":", "")[6:12])
+        mac_type = str(addrd.replace(":", "")[0:6])
         ###
         # new
-        if (addrd[0:8] == '4C:65:A8' or addrd[0:8] == 'A4:C1:38') and vwork_list[addrd][5] == None:
+        if (mac_type == '4C65A8' or mac_type == 'A4C138') and VWORK_LIST[addrd][5] == None:
             # ### only if result 3 = if notify succesful, then publish
             # ### create mqtt
             datas = str(bytes(notify_data), 'ascii').strip('\x00').strip().replace(' ', '=').split('=')
             msg_out = '{"trv":"' + addrd + '","temp":"' + str(datas[1]) + '","hum":"' + str(datas[3]) + '"}'
-            #topic_out = config2['mqtt_temp_out']
+            #topic_out = CONFIG2['mqtt_temp_out']
             #topic_out = 'esp/sensor/sensor' + str(addrd[9:17].replace(":", "")) + '/state'
-            topic_out = config2['mqtt_temp'] + mac + '/radout/status'
-            # config2['mqtt_temp']
+            topic_out = CONFIG2['mqtt_thermo'] + mac + '/radout/status'
+            # CONFIG2['mqtt_thermo']
             # send only once
-            vwork_list[addrd][5] = 1
+            VWORK_LIST[addrd][5] = 1
         ###
-        if addrd[0:8] == '00:1A:22':
+        elif mac_type == '001A22':
             # ### create mqtt
             datas = list(bytearray(notify_data))
-            msg_out = '{"trv":"' + addrd + '","temp":"' + str(float(datas[5]) / 2) + '","mode":"manual","mode2":"heat"}'
-            #topic_out = config2['mqtt_eq3_out']
-            topic_out = config2['mqtt_eq3'] + mac + '/radout/status'
-            #mqtth.publish(config2['mqtt_eq3_out'], bytes(msg_out, 'ascii'))
+            # PRINT THIS FOR BLE DEBUG
+            #print( datas )
+            # datas 5 is temperature
+            # datas 4 is probably valve open value
+            # datas for battery ?
+            #msg_out = '{"trv":"' + addrd + '","temp":"' + str(float(datas[5]) / 2) + '","mode":"manual","mode2":"heat"}'
+            msg_out = '{"trv":"' + addrd + '","temp":"' + str(float(datas[5]) / 2) + '","valve":"' + str(int(datas[4])) + '","battery":"' + str("NOT_IMPLEMENTED") + '","mode":"manual","mode2":"heat"}'
+            #topic_out = CONFIG2['mqtt_eq3_out']
+            topic_out = CONFIG2['mqtt_eq3'] + mac + '/radout/status'
+            #mqtth.publish(CONFIG2['mqtt_eq3_out'], bytes(msg_out, 'ascii'))
         # ### if connection or writing not succesful, then re-add
         ###
         ###
         if msg_out != None:
             #print('=== msg ===', msg_out)
             mqtth.publish(topic_out, bytes(msg_out, 'ascii'))
-            #vwork_status[vglob['addr']] = msg_out
-            vwork_list[addrd][5] = msg_out
+            #vwork_status[VGLOB['addr']] = msg_out
+            VWORK_LIST[addrd][5] = msg_out
             # recache page only if something changed/sent
         ###
         #gc.collect()
@@ -365,8 +398,9 @@ def fble_irq(event, data) -> None:
         #gc.collect()
     ###
     ###
-    # no collect here, not to overload irq
-    #gc.collect()
+    # it would be nice to, not collect here, not to overload irq
+    # still it might make sense
+    gc.collect()
     return
 
 #-####
@@ -379,7 +413,7 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
     # interruption when the message from mqtt arrives
     # this happens only if messages are previously requested
     print("= fmqttirq trigger")
-    global vwork_list
+    global VWORK_LIST
     if type(msg) is bytes:
         msg = msg.decode()
     if type(topic) is bytes:
@@ -390,43 +424,43 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
     worka = str(msg).strip().split(' ', 1)
     if len(worka) == 1:
         worka.append(worka[0])
-        topica = topic.replace(config2['mqtt_eq3'], "").split("/", 1)[0]
+        topica = topic.replace(CONFIG2['mqtt_eq3'], "").split("/", 1)[0]
         worka[0] = "00:1A:22:" + ":".join([topica[i:i + 2] for i in range(0, len(topica), 2)])
     print('= fmqttirq - ', str(topic), str(worka))
     ###
     ###
     # 31 add
     # -### new approach
-    if topic in [config2['mqtt_eq3'] + str(mmm).replace(":", "")[6:12] + "/radin/temp" for mmm in vwork_list]:
-        #vwork_list[worka[0]][4] = "settemp " + worka[1]
+    if topic in [CONFIG2['mqtt_eq3'] + str(mmm).replace(":", "")[6:12] + "/radin/temp" for mmm in VWORK_LIST]:
+        #VWORK_LIST[worka[0]][4] = "settemp " + worka[1]
         workfin = "settemp " + worka[1]
-        if workfin not in vwork_list[worka[0]][4]: # do not double the work
-            vwork_list[worka[0]][4].append( "settemp " + worka[1] ) # append instead of setting the value
+        if workfin not in VWORK_LIST[worka[0]][4]: # do not double the work
+            VWORK_LIST[worka[0]][4].append( "settemp " + worka[1] ) # append instead of setting the value
             print('= fmqttirq work added temp')
-    elif topic in [config2['mqtt_eq3'] + str(mmm).replace(":", "")[6:12] + "/radin/mode" for mmm in vwork_list]:
-        #vwork_list[worka[0]][4] = worka[1]
+    elif topic in [CONFIG2['mqtt_eq3'] + str(mmm).replace(":", "")[6:12] + "/radin/mode" for mmm in VWORK_LIST]:
+        #VWORK_LIST[worka[0]][4] = worka[1]
         print('= fmqttirq work added mode')
-    elif worka[0] not in list(vwork_list):
+    elif worka[0] not in list(VWORK_LIST):
         # if not the above, and the mac not in the list, then drop
         print('+ fmqttirq not on list')
     elif len(worka[0]) == 17 and len(worka[1]) > 5 and len(worka[1]) < 14:
         ### part from previous approach, do not add manual, if some other command exists
-        #if worka[1] == "manual" and len( vwork_list[worka[0]][4] != None:
+        #if worka[1] == "manual" and len( VWORK_LIST[worka[0]][4] != None:
         #    # do not overwrite if only temp check
         #    pass
         #else:
-        #vwork_list[worka[0]][4] = worka[1]
+        #VWORK_LIST[worka[0]][4] = worka[1]
         ### adding manual, to the worklist normally
         workfin = worka[1]
-        if workfin not in vwork_list[worka[0]][4]: # do not double the work
-            vwork_list[worka[0]][4].append( worka[1] ) #list
+        if workfin not in VWORK_LIST[worka[0]][4]: # do not double the work
+            VWORK_LIST[worka[0]][4].append( worka[1] ) #list
             print('= fmqttirq work added global')
     else:
         print('- fmqttirq irqbad message')
     # time.sleep(1)
     ###
     ### move back the clock so that this work will be done faster
-    vwork_list[worka[0]][1] -= 60
+    VWORK_LIST[worka[0]][1] -= 60
     #except Exception as e:
     #    print('-- fmqttirq work prio fail, paralel work')
     # ### if len 1, then scan and reset allowed
@@ -440,8 +474,9 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
             machine.reset()
     # ### if above not true and address not in the list, then skip
     # ### whitelist could be added
-    # no collect here not to overload irq
-    #gc.collect()
+    # it would be nice to, not collect here, not to overload irq
+    # still it might make sense
+    gc.collect()
     # _thread.exit()
     return
 
@@ -452,14 +487,15 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
 
 def fworker(var=None) -> None:
     ###
+    #print('. worker started')
     try:
         wdt.feed()
     except Exception as e:
         print('- fcheck wdt error, maybe not initialised ', e)
     ###
-    global vwork_list
-    global vglob
-    #global vglob_list
+    global VWORK_LIST
+    global VGLOB
+    #global VSCAN_LIST
     ###
     try:
         ### check messages
@@ -467,7 +503,7 @@ def fworker(var=None) -> None:
     except Exception as e:
         print('- worker mqtt check error ', e)
     ###
-    if max(int(aaa[2] or 0) for aaa in vwork_list.values()) > 3:
+    if max(int(aaa[2] or 0) for aaa in VWORK_LIST.values()) > 3:
         ### check how many ble connections open, stop if more than 3
         print('+ max simultaneous connections')
         return
@@ -479,7 +515,7 @@ def fworker(var=None) -> None:
     ### if noselect which device was checked longest time ago
     ftimediff = 0
     if fworkout == '':
-        for addr, val in vwork_list.items():
+        for addr, val in VWORK_LIST.items():
             if ftimediff < ftimenow - val[1]:
                 ftimediff = ftimenow - val[1]
                 fworkout = addr
@@ -489,28 +525,29 @@ def fworker(var=None) -> None:
     #print('- worker ', fworkout, ftimediff)
     ###
     ### if just rebooted, then change None with 8
-    try:
-        if vwork_list[fworkout][3] == None:
-            vwork_list[fworkout][3] = 8
-    except Exception as e:
-        print('- worker, this fails for unknown reason', e)
+    ### 43 remove
+    #try:
+    #    if VWORK_LIST[fworkout][3] == None:
+    #        VWORK_LIST[fworkout][3] = 8
+    #except Exception as e:
+    #    print('- worker, this fails for unknown reason', e)
     ###
     # 4 is worklist, 2 is handle
     # change 39
     ###
-    #if vwork_list[fworkout][4] == None and vwork_list[fworkout][3] != 7:
-    if len( vwork_list[fworkout][4] ) == 0 and vwork_list[fworkout][3] != 7:
+    #if VWORK_LIST[fworkout][4] == None and VWORK_LIST[fworkout][3] != 7:
+    if VWORK_LIST[fworkout][4] == [] and VWORK_LIST[fworkout][3] != 7:
         ### chkeck if there is work, and if not connected
-        if vwork_list[fworkout][2] != None:
+        if VWORK_LIST[fworkout][2] != None:
             ### if handle exists, but no work, then disconnect, or if connection count eq 3
             try:
-                ble.gap_disconnect(vwork_list[fworkout][2])
+                ble.gap_disconnect(VWORK_LIST[fworkout][2])
             except Exception as e:
                 print('- worker disconn warn 1 ', e)
-                vwork_list[fworkout][2] = None
-                vwork_list[fworkout][3] = 8
-                vwork_list[fworkout][5] = None
-        vwork_list[fworkout][1] = ftimenow
+                VWORK_LIST[fworkout][2] = None
+                VWORK_LIST[fworkout][3] = 8
+                VWORK_LIST[fworkout][5] = None
+        VWORK_LIST[fworkout][1] = ftimenow
         return
     ###
     ### IMPORTANT everything below assumes there is work to do
@@ -518,84 +555,91 @@ def fworker(var=None) -> None:
     print('= worker ', fworkout, ftimediff)
     ###
     ###
-    if fworkout == '00:00:00:00:00:00' and len( vwork_list[fworkout][4] ) > 0:
+    if fworkout == '00:00:00:00:00:00' and len( VWORK_LIST[fworkout][4] ) > 0:
         ### do some system actions
-        if vwork_list[fworkout][4][0] == 'scan':
+        if VWORK_LIST[fworkout][4][0] == 'scan':
             fscan(20)
-        elif vwork_list[fworkout][4][0] == 'reboot':
+        elif VWORK_LIST[fworkout][4][0] == 'reboot':
             machine.reboot()
-        elif vwork_list[fworkout][4][0] == 'ntp':
+        elif VWORK_LIST[fworkout][4][0] == 'ntp':
             ntptime.settime()
-        elif vwork_list[fworkout][4][0] == 'disc':
+        elif VWORK_LIST[fworkout][4][0] == 'disc':
             fdisc()
+        gc.collect()
         return
-    #if vwork_list[fworkout][3] != 8 and ftimenow - vwork_list[fworkout][1] == 1 * 60:
+    #if VWORK_LIST[fworkout][3] != 8 and ftimenow - VWORK_LIST[fworkout][1] == 1 * 60:
     # change 39
     # there is work, but not being done, then delay this work, and reset timers
     ###
-    #if ftimenow - vwork_list[fworkout][1] > ( delaywork * len(vwork_list) ) + ( 3 * delaywork ): # and abs( vwork_list[fworkout][0] - vwork_list[fworkout][1] ) > 30:
+    #if ftimenow - VWORK_LIST[fworkout][1] > ( VGLOB['delaywork'] * len(VWORK_LIST) ) + ( 3 * VGLOB['delaywork'] ): # and abs( VWORK_LIST[fworkout][0] - VWORK_LIST[fworkout][1] ) > 30:
     ###
     ### retries
     ### ISSUE
-    if type( vwork_list[fworkout][5] ) == int:
-        if int( vwork_list[fworkout][5] or 0 ) > 3:
+    if type( VWORK_LIST[fworkout][5] ) == int:
+        if int( VWORK_LIST[fworkout][5] or 0 ) > 3:
             ### update the check and conn timer
-            #vwork_list[fworkout][0] = ftimenow
-            print('= worker too many retries, delaying')
-            vwork_list[fworkout][1] = ftimenow
-            vwork_list[fworkout][5] = None
-            if len(vwork_list[fworkout][4]) > 10:
+            #VWORK_LIST[fworkout][0] = ftimenow
+            print('= worker tried a few times, delaying')
+            VWORK_LIST[fworkout][1] = ftimenow
+            VWORK_LIST[fworkout][5] = None
+            if len(VWORK_LIST[fworkout][4]) > 10:
                 ### too much work, removing
-                vwork_list[fworkout][4].pop(0)
+                VWORK_LIST[fworkout][4].pop(0)
+            gc.collect()
             return
             ### no return in main if, as there might be some work to do
     ###
     ### if the above is fine, just move forward
     ###
-    if vwork_list[fworkout][3] not in [8, 7]:
+    if VWORK_LIST[fworkout][3] not in [8, 7]:
         print('= worker maybe working')
         # TODO
         # if maybe working for more than 10 sec, then disconnect
         # it waits until next round
-#        if ftimenow - vwork_list[fworkout][1] > 10:
-        if ftimenow - vwork_list[fworkout][1] > ( delaywork * len(vwork_list) ) + 5:
+#        if ftimenow - VWORK_LIST[fworkout][1] > 10:
+        if ftimenow - VWORK_LIST[fworkout][1] > ( VGLOB['delaywork'] * len(VWORK_LIST) ) + 5:
             try:
-                ble.gap_disconnect(vwork_list[fworkout][2])
+                ble.gap_disconnect(VWORK_LIST[fworkout][2])
             except Exception as e:
                 print('- worker disconn warn 3 ', e)
-                #vwork_list[fworkout][0] = ftimenow
-                vwork_list[fworkout][1] = ftimenow
-                vwork_list[fworkout][2] = None
-                vwork_list[fworkout][3] = 8
+                #VWORK_LIST[fworkout][0] = ftimenow
+                VWORK_LIST[fworkout][1] = ftimenow
+                VWORK_LIST[fworkout][2] = None
+                VWORK_LIST[fworkout][3] = 8
         # return
     ###
-    elif vwork_list[fworkout][3] == 8:
+    elif VWORK_LIST[fworkout][3] == 8:
         ### finally, all abouve is fine, and work is to be done, so connect first
         print("= worker connecting")
         # longer waiting times
         # do not update time here, as the connection may fail
-        vwork_list[fworkout][5] = int(vwork_list[fworkout][5] or 0) + 1
+        VWORK_LIST[fworkout][5] = int(VWORK_LIST[fworkout][5] or 0) + 1
         try:
-            ble.gap_connect(0, fcode_addr(fworkout))
-            # does not work on older esp32
-            # , 5000, 30000 )
+            # increased connection time
+            ble.gap_connect( 0, fcode_addr(fworkout), 5000 )
         except Exception as e:
             print('- worker conn warn ', e)
             #pass
         # return
     ###
     ### assuming connected, so work
-    elif vwork_list[fworkout][3] in [7, 18]:
+    elif VWORK_LIST[fworkout][3] in [7, 18]:
         print("- worker connected - send work")
         #
-        vwork_list[fworkout][5] = None
+        VWORK_LIST[fworkout][5] = None
+        if len( VWORK_LIST[fworkout][4] ) == 0:
+            print("= worker, connected, but no work, disconnect")
+            ble.gap_disconnect(VWORK_LIST[fworkout][2])
+            return
         # maybe not update, to do whole work in one run
-        #vwork_list[fworkout][1] = time.time()
+        #VWORK_LIST[fworkout][1] = time.time()
         # select first from the work list
-        worka = str(vwork_list[fworkout][4][0]).strip().split(' ')
+        worka = str(VWORK_LIST[fworkout][4][0]).strip().split(' ')
         for iii in range(max(0, 2 - len(worka))):
             worka.append('')
+        ### 43 no thread
         _thread.start_new_thread(fble_write, (fworkout, worka[0], worka[1]))
+        #fble_write(fworkout, worka[0], worka[1])
         # return
     ###
     ### some other situation happened
@@ -611,12 +655,12 @@ def fworker(var=None) -> None:
 
 def fwebpage() -> str:
     html_in = ""
-    for addr, val in vwork_list.items():
+    for addr, val in VWORK_LIST.items():
         html_in += str(addr) + " - " + str(val[4]) + "\n"
     # generate table
-    # vglob['time']
+    # VGLOB['time']
     # generate rest of html
-    #""" + str(vglob) + """
+    #""" + str(VGLOB) + """
     html = """<!DOCTYPE html>
 <html lang="en" xml:lang="en">
 <head>
@@ -627,12 +671,13 @@ def fwebpage() -> str:
 </head>
 <body>
 <h1>EQ3 controller</h1>
-By Dr. JJ on ESP32 and micropython.
+By Dr. JJ on ESP32 and micropython.<br/>
+<a href="https://github.com/yunnanpl/esp32_python_eq3">GitHub page</a>.
 <h2>System</h2>
-Last work done on: """ + str(fnow(vglob['timelast'])) + """<br/>
+Last work done on: """ + str(fnow(VGLOB['timelast'])) + """<br/>
 Last change: """ + str(fnow()) + """<br/>
-Boot: """ + str(fnow(vglob['timeup'])) + """<br/>
-Location: """ + str(config2['mqtt_usr']) + """<br/>
+Boot: """ + str(fnow(VGLOB['timeup'])) + """<br/>
+Location: """ + str(CONFIG2['mqtt_usr']) + """<br/>
 IP: """ + str(station.ifconfig()[0]) + """
 <h2>Links:</h2>
 <a href="/list">List of devices</a><br/>
@@ -661,10 +706,11 @@ IP: """ + str(station.ifconfig()[0]) + """
 # -#### webpage loop function
 # -#### was based on socket, but now on async is more responsive and less consuming
 
-
 async def loop_web(reader, writer) -> None:
     # waiting for input
-    recv = await reader.read(64)
+    #recv = await reader.read(64)
+    await asyncio.sleep(0.1)
+    recv = yield from reader.read(64)
     flood = 0
     if gc.mem_free() < 10000:
         print('+ page flood 1')
@@ -676,7 +722,11 @@ async def loop_web(reader, writer) -> None:
     try:
         #recvtmp = recv.decode()
         if flood == 0:
-            requestfull = recv.decode().split('\r')[0].split(' ')[1].split('?')  # [4:-6]
+            requesttype = recv.decode()[0:3]
+            requestfull = recv.decode().split('\r')[0].split(' ')[1].split('?')
+            #requestfull = requestfull  # [4:-6]
+            #recv2 = await reader.read()
+            #print( recv2.decode() )
         else:
             requestfull = ['/flood']
     except Exception as e:
@@ -687,15 +737,15 @@ async def loop_web(reader, writer) -> None:
     # ?
     #
     print('= f serving page ', requestfull)
-    global vglob
-    global vglob_list
+    global VGLOB
+    global VSCAN_LIST
     request = requestfull[0]
     #print(request, requestfull)
     requestval = ''
     vwebpage = b''
     resp = b''
     #timer2 = time.ticks_ms()
-    gc.collect()
+    #gc.collect()
     if len(requestfull) == 2:
         requestval = requestfull[1]
     #
@@ -726,20 +776,28 @@ Connection: close
         # gc.collect()
     elif request == "/list":
         vwebpage = '<pre>\n'
-        vwebpage += 'MAC, last seen, rssi, name\n'
-        if len(vglob_list) > 0:
-            for iii in vglob_list.items():
-                vwebpage += '<a href="/wlistdo?' + str(iii[0]) + '">add</a> ' + str(iii[0]) + ' ' + \
-                    '{: >{w}}'.format(str(time.time() - iii[1][3]), w=5) + ' ' + str(iii[1][1]) + ' ' + str(iii[1][2]) + '\n'
+        vwebpage += '<form method="post" action="/todo">\n'
+        if len(VSCAN_LIST) > 0:
+            vwebpage += '<hr />MAC, last seen, rssi, name\n'
+            for iii in VSCAN_LIST.items():
+                #vwebpage += '<a href="/wlistdo?' + str(iii[0]) + '">add</a> ' + str(iii[0]) + ' ' + \
+                #    '{: >{w}}'.format(str(time.time() - iii[1][3]), w=5) + ' ' + str(iii[1][1]) + ' ' + str(iii[1][2]) + '\n'
+                vwebpage += '<input type="radio" name="maca" value="' + str(iii[0]) + '">'+ str(iii[0]) + ' ' + '{: >{w}}'.format(str(time.time() - iii[1][3]), w=5) + ' ' + str(iii[1][1]) + ' ' + str(iii[1][2]) + '\n'
+            vwebpage += 'Type:\n<input type="radio" name="type" value="none">none\n<input type="radio" name="type" value="climate">climate\n<input type="radio" name="type" value="tracker">tracker\n'
+            vwebpage += '<input type="submit" name="work" value="add">\n'
+            vwebpage += '</form>\n'
         else:
-            vwebpage = '<pre>empty list\n'
+            vwebpage += '<pre>empty list\n'
         ###
-        vwebpage += '\n\n'
-        vwebpage += 'MAC remove white listed\n'
-        for kkk in list(vwork_list):
+        vwebpage += '\n'
+        vwebpage += '<hr />MAC remove white listed\n'
+        vwebpage += '<form method="post" action="/todo">\n'
+        for kkk in list(VWORK_LIST):
             if kkk == '00:00:00:00:00:00':
                 continue
-            vwebpage += '<a href="/wlistdo?' + str(kkk) + '-">remove</a> ' + str(kkk) + ' ' + '\n'
+            vwebpage += '<input type="radio" name="macr" value="' + str(kkk) + '">' + str(kkk) + '\n'
+        vwebpage += '<input type="submit" name="work" value="del">\n'
+        vwebpage += '</form>\n'
         vwebpage += '</pre>\n'
         ###
         header = """HTTP/1.1 200 OK
@@ -753,30 +811,41 @@ Connection: close
         # await writer.awrite(vwebpage)
         # conn.close()
     #####
+    ##### do all the work here
     #####
-    elif request == "/wlistdo":
+    elif request == "/todo":
+        #maca=E1:CF:E3:5A:04:28&type=climate&work=add
+        #if requesttype != "POS":
+        #    #break
+        #    return
+        recv2 = yield from reader.read(2000)
+        recv3 = recv2.decode().split('\r')[-1].replace('%3A', ':').strip().split('&')
+        print(recv3)
+        recv3w = recv3[-1].split('=')[1]
+        recv3m = recv3[0].split('=')[1]
         #vwork['0'] = 'scan'
         header = """HTTP/1.1 200 OK
 Content-Type: text/html
-Content-Length: 36
+Content-Length: 39
 Connection: close
 
-Added or removed """ + str(requestval) + """.
+Work -> """ + str( recv3w ) + """, mac -> """ + str( recv3m ) + """.
 """
         #conn.sendall(header + "\r\n" + vwebpage)
         await writer.awrite(header + "\r\n")
         # addr, time, handle, work, status
-        # vglob_list[str(requestval)][0]
-        if str(requestval)[-1] == "-":
-            requestval = str(requestval)[0:17]
-            del vwork_list[str(requestval)]
+        # VSCAN_LIST[str(requestval)][0]
+        if recv3w == "del":
+            #requestval = str(requestval)[0:17]
+            del VWORK_LIST[str(recv3m)]
+        elif recv3w == "add":
+            VWORK_LIST[str(recv3m)] = [None, time.time(), None, 8, [], None]
         else:
-            vwork_list[str(requestval)] = [None, time.time(), None, 8, [], None]
+            return
         filewl = open('wl.txt', 'w')
-        filewl.write(str(list(vwork_list)))
+        filewl.write( str(VWORK_LIST) )
         filewl.close()
-        # await writer.awrite(vwebpage)
-        # machine.reset()
+    #####
     #####
     #####
     elif request == "/deldo":
@@ -815,11 +884,11 @@ Connection: close
         else:
             reset_cause = "unknown"
         #
-        if vglob['status'] == 8:
+        if VGLOB['status'] == 8:
             status = "idle"
-        elif vglob['status'] == 5:
+        elif VGLOB['status'] == 5:
             status = "scanning"
-        elif vglob['status'] == 1:
+        elif VGLOB['status'] == 1:
             status = "recovering"
         else:
             status = "working"
@@ -830,11 +899,11 @@ To disable webrepl, delete webrepl_cfg.py and reboot device.
 
 Dir: """ + str(os.listdir()) + """
 
-Current work: """ + str(vglob) + """
+Current work: """ + str(VGLOB) + """
 
-Details:\n""" +  "\n".join( [ str(aaa) for aaa in vwork_list.items() ] ) + """
+Details:\n""" +  "\n".join( [ str(aaa) for aaa in VWORK_LIST.items() ] ) + """
 
-MQTT addresses IN:\n""" + "\n".join( [ str(aaa) for aaa in mqtt_subscribe_list ] ) + """
+MQTT addresses IN:\n""" + "\n".join( [ str(aaa) for aaa in VMQTT_SUB_LIST ] ) + """
 
 Status: """ + status + """
 
@@ -888,6 +957,7 @@ Connection: close
 Scan scheduled.
 """
         #conn.sendall(header + "\r\n" + vwebpage)
+        VWORK_LIST['00:00:00:00:00:00'][4].append( 'scan' )
         await writer.awrite(header + "\r\n")
         # await writer.awrite(vwebpage)
         # machine.reset()
@@ -943,8 +1013,8 @@ Connection: close
     #####
     elif request == "/otado":
         vwebpage = ''
-        #vglob = ''
-        vglob_list = {}
+        #VGLOB = ''
+        VSCAN_LIST = {}
         #gc.collect()
         # s.setblocking(0)
         header = """HTTP/1.1 302 Found
@@ -955,14 +1025,17 @@ Connection: close
 """
         # =
         ble.active(False)
+        VGLOB['timework'] = time.time()+30
+        VGLOB['timescan'] = time.time()+30
         gc.collect()
         #headerin = conn.recv(500).decode()
-        headerin = await reader.read(500)
+        headerin = yield from reader.read(500)
         # print(headerin)
         headerin = headerin.decode()
         boundaryin = headerin.split("boundary=", 2)[1].split('\r\n')[0]
         lenin = int(headerin.split("\r\nContent-Length: ", 2)[1].split('\r\n')[0])
-        bufflen = round(lenin / float(str(round(lenin / 3000)) + ".5"))
+        # dividing into 2000 bytes pieces
+        bufflen = round(lenin / float(str(round(lenin / 2000)) + ".5"))
         #lenin = 0
         # print("===")
         #print( headerin )
@@ -977,7 +1050,7 @@ Connection: close
         fff = open('upload', 'wb')
         while True:
             #dataaa = conn.recv(bufflen).decode().split('\r\n--' + boundaryin, 2)
-            dataaa = await reader.read(bufflen)
+            dataaa = yield from reader.read(bufflen)
             dataaa = dataaa.decode().split('\r\n--' + boundaryin, 2)
             splita = len(dataaa)
             #print( splita )
@@ -1063,7 +1136,7 @@ Connection: close
         # await writer.awrite(vwebpage)
         # conn.close()
         # time.sleep(2) # no sleep here ;)
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.1) # was 0.3
         machine.reset()
         # time.sleep(1)
     #####
@@ -1092,12 +1165,13 @@ Connection: close
     # drain and sleep needed for good transfer
     vwebpage = b''
     resp = b''
-    await asyncio.sleep(0.2)
+    # was 0.2
+    await asyncio.sleep(0.1)
     await reader.wait_closed()
     # await reader.aclose()
     gc.collect()
     #print("-- f serving page done")
-    if not config2['loop']:
+    if not CONFIG2['loop']:
         _thread.exit()
         return
         # break
@@ -1120,15 +1194,22 @@ def fcheck(var=None) -> None:
     except Exception as e:
         print('- fcheck wdt error, maybe not initialised ', e)
     ###
+    if int(gc.mem_free()) < 30000:
+        print('- fcheck memory full')
+        gc.collect()
+        return
+    ###
     try:
         mqtth.ping()
     except Exception as e:
         print('- fcheck mqqt ping error ', e)
     ###
+    global VGLOB
+    if VGLOB['status'] == 5:
+        return
     ### if all is fine, then get some globals first
-    global vglob
-    global vglob_list
-    global vwork_list
+    global VSCAN_LIST
+    global VWORK_LIST
     ftimenow = time.time()
     ###
     ###
@@ -1151,60 +1232,62 @@ def fcheck(var=None) -> None:
     ### this is in ms, most other calculations for time are in seconds
     if time.ticks_ms() - mqtth.last_cpacket > 5 * 60 * 1000:
         print('- fcheck mqtt')
-        fmqtt_recover()
+        _thread.start_new_thread(fmqtt_recover, ())
+        #fmqtt_recover()
         return
     ###
     ### remove addresses older than x minutes
     #last_contact = 9999
-    # this concerns vglob_list and not vwork_list
-    for addr, val in vglob_list.items():
+    # this concerns VSCAN_LIST and not VWORK_LIST
+    for addr, val in VSCAN_LIST.items():
         if ftimenow - val[3] > 20 * 60:
-            vglob_list.pop(addr)
+            VSCAN_LIST.pop(addr)
     ###
     ### check ntp every 24 hours
-    if ftimenow - vglob['timentp'] > 24 * 60 * 60:
-        vglob['timentp'] = ftimenow
+    if ftimenow - VGLOB['timentp'] > 24 * 60 * 60:
+        VGLOB['timentp'] = ftimenow
         fntp()
     ###
     ### check autodiscovery every 6 hours
-    if ftimenow - vglob['timedisc'] > 6 * 60 * 60:
-        vglob['timedisc'] = ftimenow
+    if ftimenow - VGLOB['timedisc'] > 6 * 60 * 60:
+        VGLOB['timedisc'] = ftimenow
         fdisc()
     ###
     ### if 5 minutes from the last contact, then scan
     # INFO: optimisations for scan scheduling make no sense, start every 1 minute
     # here I use the global variable timescan
-    # still the vwork_list['00:00:00:00:00:00'][0] system variable last work could be used
-    if ftimenow - vglob['timescan'] > 1 * 60 and len( vwork_list['00:00:00:00:00:00'][4] ) == 0:
+    # still the VWORK_LIST['00:00:00:00:00:00'][0] system variable last work could be used
+    if ftimenow - VGLOB['timescan'] > 1 * 60 and len( VWORK_LIST['00:00:00:00:00:00'][4] ) == 0:
         # if all handles are null, start scan
-        #if [aaa[2] for aaa in vwork_list.values()] == [None] * len(vwork_list):
-        if len( vwork_list['00:00:00:00:00:00'][4] ) == 0:
-            vwork_list['00:00:00:00:00:00'][4].append( 'scan' )
-            #vwork_list['00:00:00:00:00:00'][0] = time.time()
-            #vwork_list['00:00:00:00:00:00'][1] = time.time()
+        #if [aaa[2] for aaa in VWORK_LIST.values()] == [None] * len(VWORK_LIST):
+        if len( VWORK_LIST['00:00:00:00:00:00'][4] ) == 0:
+            VWORK_LIST['00:00:00:00:00:00'][4].append( 'scan' )
+            #VWORK_LIST['00:00:00:00:00:00'][0] = time.time()
+            #VWORK_LIST['00:00:00:00:00:00'][1] = time.time()
             #ble.gap_scan(20 * 1000, 50000, 30000, 1)
             #ble.gap_scan(40 * 1000, 50000, 30000, 1)
     ###
     ###
-    if ftimenow - vglob['timework'] > delayquery * 60:
-        vglob['timework'] = ftimenow
-        for addr, val in vwork_list.items():
+    if ftimenow - VGLOB['timework'] > VGLOB['delayquery'] * 60:
+        VGLOB['timework'] = ftimenow
+        for addr, val in VWORK_LIST.items():
             # check if not connected [2] == None
             # possible to check if no work [4] == None
-            #if ftimenow - val[1] > delayquery * 60 and vglob['timework']and val[2] == None and addr.replace(":", "")[0:6] == '001A22':
+            #if ftimenow - val[1] > VGLOB['delayquery'] * 60 and VGLOB['timework']and val[2] == None and addr.replace(":", "")[0:6] == '001A22':
             if val[2] == None and addr.replace(":", "")[0:6] == '001A22':
-                if len( vwork_list[addr][4] ) == 0:
-                    vwork_list[addr][4].append( 'manual' )
-                #vwork_list['00:00:00:00:00:00'][1] = time.time()
-            #if ftimenow - val[1] > delayquery * 60 and val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
+                if len( VWORK_LIST[addr][4] ) == 0:
+                    VWORK_LIST[addr][4].append( 'manual' )
+                #VWORK_LIST['00:00:00:00:00:00'][1] = time.time()
+            #if ftimenow - val[1] > VGLOB['delayquery'] * 60 and val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
             if val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
-                if len( vwork_list[addr][4] ) == 0:
-                    vwork_list[addr][4].append( 'gettemp' )
-            #vwork_list['00:00:00:00:00:00'][1] = time.time()
+                if len( VWORK_LIST[addr][4] ) == 0:
+                    VWORK_LIST[addr][4].append( 'gettemp' )
+            #VWORK_LIST['00:00:00:00:00:00'][1] = time.time()
     ###
     ###
     gc.collect()
-    #vglob['status'] = 8
+    #_thread.exit()
+    #VGLOB['status'] = 8
     #print('-- fcheck done')
     return
 
@@ -1213,7 +1296,7 @@ def fcheck(var=None) -> None:
 #-####
 
 
-def fdisc() -> None:
+def fdisc(var=None) -> None:
     ###
     print('= send mqtt autodiscovery')
     ### home assistant auto discovery
@@ -1221,59 +1304,57 @@ def fdisc() -> None:
     #print("publishing mqtt autodiscovery")
     ###
     ### loop through all trusted devices
-    for hhh in vwork_list:
-        time.sleep(0.5)
+    for hhh in VWORK_LIST:
+        time.sleep(0.1) # was 0.5
         #mac = str(hhh[9:17].replace(":", ""))
         mac = str(hhh.replace(":", "")[6:12])
         mac_type = str(hhh.replace(":", "")[0:6])
         ###
-        if (mac_type == '4C65A8' or mac_type == 'A4C138'):
+        if mac_type == '4C65A8' or mac_type == 'A4C138':
             #html_in += str(vvv) + "\n"
             ###
             #mac = str(hhh[9:17].replace(":", ""))
             ###
             topict = f'homeassistant/sensor/temp_{mac}_temp/config'
-            devicet = '{"device_class": "temperature", "name": "Mijia ' + mac + ' Temperature", "state_topic": "' + config2["mqtt_temp"] + mac + \
-                '/radout/status", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", "uniq_id": "temp_' + \
-                mac + '_T", "dev": { "ids": [ "temp_' + mac + '" ], "name":"temp_' + mac + '" } }'
+            devicet = '{"device_class": "temperature", "name": "Mijia ' + mac + ' Temperature", \
+"state_topic": "' + CONFIG2["mqtt_thermo"] + mac + '/radout/status", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", \
+"uniq_id": "temp_' + mac + '_T", "dev": { "ids": [ "temp_' + mac + '" ], "name":"temp_' + mac + '" } }'
             mqtth.publish(topict, bytes(devicet, 'ascii'), True)
             ###
             topich = f'homeassistant/sensor/temp_{mac}_hum/config'
-            deviceh = '{"device_class": "humidity", "name": "Mijia ' + mac + ' Humidity", "state_topic": "' + config2["mqtt_temp"] + mac + \
-                '/radout/status", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", "uniq_id": "temp_' + \
-                mac + '_H", "dev": { "ids": [ "temp_' + mac + '" ], "name":"temp_' + mac + '" } }'
+            deviceh = '{"device_class": "humidity", "name": "Mijia ' + mac + ' Humidity", \
+"state_topic": "' + CONFIG2["mqtt_thermo"] + mac + '/radout/status", "unit_of_measurement": "%", "value_template": "{{ value_json.hum }}", \
+"uniq_id": "temp_' + mac + '_H", "dev": { "ids": [ "temp_' + mac + '" ], "name":"temp_' + mac + '" } }'
             mqtth.publish(topich, bytes(deviceh, 'ascii'), True)
         ###
         # /hass/climate/climate3/radin/trv 00:1A:22:0E:C9:45 manual
         # /hass/climate/climate1/radout/status {"trv":"00:1A:22:0E:F6:F5","temp":"19.0","mode":"manual"}
-        if (mac_type == '001A22'):
+        if mac_type == '001A22':
             ###
             #  "~": "homeassistant/light/kitchen",
             # each eq3 has to have its own mqtt
             topicc = f'homeassistant/climate/clim_{mac}_eq3/config'
-            if config2['mqtt_temp_src'] != "":
-                currtemp = '"curr_temp_t": "' + config2['mqtt_temp_src'] + '/radout/status", "curr_temp_tpl": "{{value_json.temp}}", '
+            if CONFIG2['mqtt_thermo_src'] != "":
+                currtemp = '"curr_temp_t": "' + CONFIG2['mqtt_thermo_src'] + '/radout/status", "curr_temp_tpl": "{{value_json.temp}}", '
             else:
                 currtemp = ""
-            devicec = '{ "name": "clim_' + mac + '_eq3", \
-                "unique_id": "id_' + mac + '", \
-                "modes": [ "heat" ], \
-                "mode_cmd_t": "' + config2['mqtt_eq3'] + mac + '/radin/mode2", \
-                "mode_stat_t": "' + config2['mqtt_eq3'] + mac + '/radout/status", \
-                "mode_stat_tpl": "{{value_json.mode2}}", \
-                "temp_cmd_t": "' + config2['mqtt_eq3'] + mac + '/radin/temp", \
-                "temp_stat_t": "' + config2['mqtt_eq3'] + mac + '/radout/status", \
-                "temp_stat_tpl": "{{value_json.temp}}", \
-                ' + currtemp + ' \
-                "min_temp": "12", \
-                "max_temp": "28", \
-                "temp_step": "0.5", \
-                "hold_state_template": "{{value_json.mode}}", \
-                "hold_state_topic": "' + config2['mqtt_eq3'] + mac + '/radout/status", \
-                "hold_command_topic": "' + config2['mqtt_eq3'] + mac + '/radin/mode", \
-                "hold_modes": [ "auto", "manual", "boost", "away" ] }'
+            devicec = '{ "name": "clim_' + mac + '_eq3", "unique_id": "id_' + mac + '", "modes": [ "heat" ], \
+"mode_cmd_t": "' + CONFIG2['mqtt_eq3'] + mac + '/radin/mode2", "mode_stat_t": "' + CONFIG2['mqtt_eq3'] + mac + '/radout/status", \
+"mode_stat_tpl": "{{value_json.mode2}}", "temp_cmd_t": "' + CONFIG2['mqtt_eq3'] + mac + '/radin/temp", \
+"temp_stat_t": "' + CONFIG2['mqtt_eq3'] + mac + '/radout/status", "temp_stat_tpl": "{{value_json.temp}}", \
+' + currtemp + ' "min_temp": "5", "max_temp": "29.5", "temp_step": "0.5", \
+"hold_state_template": "{{value_json.mode}}", "hold_state_topic": "' + CONFIG2['mqtt_eq3'] + mac + '/radout/status", \
+"hold_command_topic": "' + CONFIG2['mqtt_eq3'] + mac + '/radin/mode", "hold_modes": [ "auto", "manual", "boost", "away" ] }'
             mqtth.publish(topicc, bytes(devicec, 'ascii'), True)
             # add True at the end to retain or retain=True
+        if mac_type[0:4] == 'FFFF':
+            #topicp = f'homeassistant/sensor/presence_{mac}_eq3/config'
+            topicp = f'homeassistant/device_tracker/presence_{mac}_eq3/config'
+            devicep = '{"name": "Tracker ' + mac + '", "state_topic": "' + CONFIG2["mqtt_presence"] + mac + '/radout/status", \
+"expire_after": "240", "consider_home": "180", "unique_id": "tracker_' + mac + '", "source_type": "bluetooth" }'
+            #devicep = '{"name": "Tracker ' + mac + '", "state_topic": "' + CONFIG2["mqtt_presence"] + mac + '/radout/status", "value_template": "{{ value_json.location }}", "expire_after": "180", "uniq_id": "tracker_' + mac + '", "dev": { "ids": [ "tracker_' + mac + '" ], "name":"tracker_' + mac + '" }}'
+            #devicep = '{"device_class": "None", "name": "Tracker ' + mac + '", "state_topic": "' + CONFIG2["mqtt_presence"] + mac + '/radout/status", "value_template": "{{ value_json.location }}", "uniq_id": "tracker_' + mac + '", "dev": { "ids": [ "tracker_' + mac + '" ], "name":"tracker_' + mac + '" }, "expire_after": 120 }'
+            mqtth.publish(topicp, bytes(devicep, 'ascii'), True)
         ###
         ### here additional devices for publishing can be added
     gc.collect()
@@ -1283,37 +1364,47 @@ def fdisc() -> None:
 #-####
 #-####
 
-def fmqtt_recover() -> None:
+def fmqtt_recover(var=None) -> None:
+    global VGLOB
     print('= f mqtt recover')
-    vglob['status'] = 1
+    VGLOB['status'] = 1
     mqtth.keepalive = 130 # that is that ping fits easily 3 times
-    time.sleep(0.5)
+    #time.sleep(0.5)
     mqtth.connect()
-    time.sleep(0.5)
+    #time.sleep(0.5)
     mqtth.set_callback(fmqtt_irq)
-    time.sleep(0.5)
-    for lll in mqtt_subscribe_list:
+    #time.sleep(0.5)
+    for lll in VMQTT_SUB_LIST:
         mqtth.subscribe(lll)
-    # mqtth.subscribe(config2['mqtt_eq3_in'])
-    vglob['status'] = 8
+    # mqtth.subscribe(CONFIG2['mqtt_eq3_in'])
+    VGLOB['status'] = 8
+    #gc.collect()
+    try:
+        # if run as thread, then stop thread
+        _thread.exit()
+        #pass
+    except Exception as e:
+        # if this fails, there is no reason to panic, function not in thread
+        print('- fblew close thread:', e)
     gc.collect()
     return
 
+
+# -#### mqtt
+# -#### this is moved from boot, to allow recovery
+_thread.start_new_thread(fmqtt_recover, ())
+# wait for connection at boot
+time.sleep(2)
 
 #-####
 #-####
 # -#### connect interrupts
 ble.irq(fble_irq)
 
-# -#### mqtt
-# -#### this is moved from boot, to allow recovery
-fmqtt_recover()
-
 #-####
 #-####
 # -#### threads
 #loopwebthread = _thread.start_new_thread(loop_web, ())
-
 
 def fstart_server() -> None:
     async_loop = asyncio.get_event_loop()
@@ -1322,37 +1413,61 @@ def fstart_server() -> None:
     async_loop.run_forever()
     return
 
+#-####
+#-####
+#-####
+#thread_web = _thread.start_new_thread(fstart_server, ())
+_thread.start_new_thread(fstart_server, ())
 
-#-####
-#-####
-#-####
-thread_web = _thread.start_new_thread(fstart_server, ())
-
-# -#### timers
-# -#### scan every x minutes
-# quic scan could be done every 5 min
-# scan can be added by automatic timer, or mqtt, or web
-#timer_schedule.init(period=(10 * 60 * 1000), callback=fschedule)
-# ### work every 5 seconds
-# maybe lower to 4 seconds ?
-# this is ms
-# 4-5 seconds is completely fine
-timer_work.init( period=( delaywork * 1000 ), callback=fworker)
-# ### clean every 1 minutes
-timer_check.init( period = ( delaycheck * 60 * 1000 ), callback=fcheck)
+#-#### WDT
+# do not move this to boot
+# after boot is succesful
+wdt = machine.WDT( timeout = int( VGLOB['delaycheck'] * 2 * 60 ) * 1000 )
 
 #-####
 #-####
 # -#### first scan, longer
 # if this is on, then something other fails...
-#fdisc()
-#fntp()
+fdisc()
+fntp()
 fscan(60)
+# wait for connection at boot
+time.sleep(2)
 
-#WDT
-# do not move this to boot
-# after boot is succesful
-wdt = machine.WDT( timeout = int( delaycheck * 1 * 60 ) * 1000 ) # 3 * delay seconds
+# -#### timers
+# -#### scan every x minutes
+# 4-5 seconds is completely fine for work
+#
+timer_work.init( period = ( VGLOB['delaywork'] * 1000 ), callback=fworker)
+# ### clean every 1 minutes
+#_thread.start_new_thread(fble_write, (fworkout, worka[0], worka[1]))
+
+#
+timer_check.init( period = ( VGLOB['delaycheck'] * 60 * 1000 ), callback=fcheck)
+#timer_check.init( period = ( VGLOB['delaycheck'] * 60 * 1000 ), callback=_thread.start_new_thread( fcheck, [None] ) )
+
+# no timers to save timers ;)
+###
+### Main loop
+###
+#while True:
+#    # #await asyncio.sleep(5)
+#    time.sleep(5)
+#    gc.collect()
+#    # #
+#    #ftimenow = time.time()
+#    print('. main loop', time.time() - VGLOB['timework'], VGLOB['delayquery'] * 60)
+#    # #
+#    if time.time() - VGLOB['timework'] > VGLOB['delayquery'] * 60:
+#        print('. worker')
+#        fworker(1)
+#    elif time.time() - VGLOB['timecheck'] > VGLOB['delayquery'] * 60 * 1000:
+#        print('. check')
+#        VGLOB['timecheck'] = time.time()
+#        fcheck(1)
+
+#time.sleep(2)
 
 gc.collect()
+
 #-###
