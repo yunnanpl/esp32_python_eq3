@@ -73,4 +73,6 @@ Below -90 it works without any issues.
    - not clear if necessary
 
 # Other interesting liks
-https://github.com/softypit/esp32_mqtt_eq3
+ - https://github.com/softypit/esp32_mqtt_eq3
+ - https://github.com/rytilahti/python-eq3bt
+ - https://github.com/bimbar/bluepy_devices
