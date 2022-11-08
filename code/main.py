@@ -21,8 +21,8 @@ VGLOB['timedisc'] = 0
 
 # time between 2-5 is fine
 VGLOB['delaywork'] = 5 # in seconds
-VGLOB['delayquery'] = 2 # in minutes
-VGLOB['delaycheck'] = 1 # in minutes
+VGLOB['delayquery'] = 120 # in seconds
+VGLOB['delaycheck'] = 60 # in seconds
 
 # -#### global variables
 VSCAN_LIST = {}
@@ -374,10 +374,13 @@ def fble_irq(event, data) -> None:
             # PRINT THIS FOR BLE DEBUG
             #print( datas )
             # datas 5 is temperature
-            # datas 4 is probably valve open value
+            # datas 3 is probably valve open value
             # datas for battery ?
             #msg_out = '{"trv":"' + addrd + '","temp":"' + str(float(datas[5]) / 2) + '","mode":"manual","mode2":"heat"}'
-            msg_out = '{"trv":"' + addrd + '","temp":"' + str(float(datas[5]) / 2) + '","valve":"' + str(int(datas[4])) + '","battery":"' + str("NOT_IMPLEMENTED") + '","mode":"manual","mode2":"heat"}'
+            batt_out = "OK"
+            if int(datas[2]) > 70:
+                batt_out = "LOW"
+            msg_out = '{"trv":"' + addrd + '","temp":"' + str(float(datas[5]) / 2) + '","valve":"' + str(int(datas[3])) + '","battery":"' + str(batt_out) + '","mode":"manual","mode2":"heat"}'
             #topic_out = CONFIG2['mqtt_eq3_out']
             topic_out = CONFIG2['mqtt_eq3'] + mac + '/radout/status'
             #mqtth.publish(CONFIG2['mqtt_eq3_out'], bytes(msg_out, 'ascii'))
@@ -992,6 +995,10 @@ Old devices removed from the list and if necessary the work status was reset.
     #####
     #####
     elif request == "/ota":
+        # postpone job, to speed up ota
+        VGLOB['timework'] = time.time()+120
+        VGLOB['timescan'] = time.time()+180
+        ble.gap_scan( 0 )
         # method="post"
         vwebpage = """<pre>Usually upload main.py file. Sometimes boot.py file. Binary files do not work yet.
 <br/>
@@ -1012,6 +1019,9 @@ Connection: close
     #####
     #####
     elif request == "/otado":
+        # postpone job, to speed up ota
+        VGLOB['timework'] = time.time()+120
+        VGLOB['timescan'] = time.time()+180
         vwebpage = ''
         #VGLOB = ''
         VSCAN_LIST = {}
@@ -1025,8 +1035,6 @@ Connection: close
 """
         # =
         ble.active(False)
-        VGLOB['timework'] = time.time()+30
-        VGLOB['timescan'] = time.time()+30
         gc.collect()
         #headerin = conn.recv(500).decode()
         headerin = yield from reader.read(500)
@@ -1268,17 +1276,17 @@ def fcheck(var=None) -> None:
             #ble.gap_scan(40 * 1000, 50000, 30000, 1)
     ###
     ###
-    if ftimenow - VGLOB['timework'] > VGLOB['delayquery'] * 60:
+    if ftimenow - VGLOB['timework'] > VGLOB['delayquery']:
         VGLOB['timework'] = ftimenow
         for addr, val in VWORK_LIST.items():
             # check if not connected [2] == None
             # possible to check if no work [4] == None
-            #if ftimenow - val[1] > VGLOB['delayquery'] * 60 and VGLOB['timework']and val[2] == None and addr.replace(":", "")[0:6] == '001A22':
+            #if ftimenow - val[1] > VGLOB['delayquery'] and VGLOB['timework']and val[2] == None and addr.replace(":", "")[0:6] == '001A22':
             if val[2] == None and addr.replace(":", "")[0:6] == '001A22':
                 if len( VWORK_LIST[addr][4] ) == 0:
                     VWORK_LIST[addr][4].append( 'manual' )
                 #VWORK_LIST['00:00:00:00:00:00'][1] = time.time()
-            #if ftimenow - val[1] > VGLOB['delayquery'] * 60 and val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
+            #if ftimenow - val[1] > VGLOB['delayquery'] and val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
             if val[2] == None and addr.replace(":", "")[0:6] == '4C65A8':
                 if len( VWORK_LIST[addr][4] ) == 0:
                     VWORK_LIST[addr][4].append( 'gettemp' )
@@ -1346,6 +1354,19 @@ def fdisc(var=None) -> None:
 "hold_state_template": "{{value_json.mode}}", "hold_state_topic": "' + CONFIG2['mqtt_eq3'] + mac + '/radout/status", \
 "hold_command_topic": "' + CONFIG2['mqtt_eq3'] + mac + '/radin/mode", "hold_modes": [ "auto", "manual", "boost", "away" ] }'
             mqtth.publish(topicc, bytes(devicec, 'ascii'), True)
+            ### battery and valve open sensors
+            topicc = f'homeassistant/sensor/clim_{mac}_eq3_valve/config'
+            devicec = '{ "name": "clim_' + mac + '_eq3_valve", \
+"state_topic": "' + CONFIG2['mqtt_eq3'] + mac + '/radout/status", "value_template": "{{ value_json.valve }}", \
+"uniq_id": "id_' + mac + '_valve" }'                     
+            mqtth.publish(topicc, bytes(devicec, 'ascii'), True)
+            ###
+            topicc = f'homeassistant/sensor/clim_{mac}_eq3_battery/config'
+            devicec = '{ "name": "clim_' + mac + '_eq3_battery", \
+"state_topic": "' + CONFIG2['mqtt_eq3'] + mac + '/radout/status", "value_template": "{{ value_json.battery }}", \
+"uniq_id": "id_' + mac + '_battery" }'                     
+            mqtth.publish(topicc, bytes(devicec, 'ascii'), True)
+            ###    
             # add True at the end to retain or retain=True
         if mac_type[0:4] == 'FFFF':
             #topicp = f'homeassistant/sensor/presence_{mac}_eq3/config'
@@ -1422,7 +1443,7 @@ _thread.start_new_thread(fstart_server, ())
 #-#### WDT
 # do not move this to boot
 # after boot is succesful
-wdt = machine.WDT( timeout = int( VGLOB['delaycheck'] * 2 * 60 ) * 1000 )
+wdt = machine.WDT( timeout = int( VGLOB['delaycheck'] * 2 ) * 1000 )
 
 #-####
 #-####
@@ -1443,7 +1464,7 @@ timer_work.init( period = ( VGLOB['delaywork'] * 1000 ), callback=fworker)
 #_thread.start_new_thread(fble_write, (fworkout, worka[0], worka[1]))
 
 #
-timer_check.init( period = ( VGLOB['delaycheck'] * 60 * 1000 ), callback=fcheck)
+timer_check.init( period = ( VGLOB['delaycheck'] * 1000 ), callback=fcheck)
 #timer_check.init( period = ( VGLOB['delaycheck'] * 60 * 1000 ), callback=_thread.start_new_thread( fcheck, [None] ) )
 
 # no timers to save timers ;)
@@ -1456,12 +1477,12 @@ timer_check.init( period = ( VGLOB['delaycheck'] * 60 * 1000 ), callback=fcheck)
 #    gc.collect()
 #    # #
 #    #ftimenow = time.time()
-#    print('. main loop', time.time() - VGLOB['timework'], VGLOB['delayquery'] * 60)
+#    print('. main loop', time.time() - VGLOB['timework'], VGLOB['delayquery'] )
 #    # #
-#    if time.time() - VGLOB['timework'] > VGLOB['delayquery'] * 60:
+#    if time.time() - VGLOB['timework'] > VGLOB['delayquery']:
 #        print('. worker')
 #        fworker(1)
-#    elif time.time() - VGLOB['timecheck'] > VGLOB['delayquery'] * 60 * 1000:
+#    elif time.time() - VGLOB['timecheck'] > VGLOB['delayquery'] * 1000:
 #        print('. check')
 #        VGLOB['timecheck'] = time.time()
 #        fcheck(1)
