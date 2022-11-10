@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: latin-1 -*-
 """
 This is main code part.
 
@@ -20,7 +20,7 @@ VGLOB['timentp'] = 0
 VGLOB['timedisc'] = 0
 
 # time between 2-5 is fine
-VGLOB['delaywork'] = 5 # in seconds
+VGLOB['delaywork'] = 4 # in seconds
 VGLOB['delayquery'] = 120 # in seconds
 VGLOB['delaycheck'] = 60 # in seconds
 
@@ -39,8 +39,8 @@ try:
         mac = str(jjj.replace(":", "")[6:12])
         VMQTT_SUB_LIST.append(f'{CONFIG2['mqtt_eq3']}{mac}/radin/mode')
         VMQTT_SUB_LIST.append(f'{CONFIG2['mqtt_eq3']}{mac}/radin/temp')
-    del vwork_temp
     wl.close()
+    del vwork_temp, jjj, wl, val, mac
 except Exception as e:
     print('- load wl failed, setting default, this is ok ', e)
     # if the above fails for whatever reason, start with clean white list
@@ -51,7 +51,7 @@ except Exception as e:
 #-####
 
 
-def fnow(nowtime: int = 0, ttt: str = "s"):
+def fnow(nowtime: int = 0, ttt: str = "s") -> str:
     # typing time.time in default value does not work
     if nowtime == 0:
         nowtime = time.time()
@@ -102,6 +102,7 @@ def fcode_addr(addr: str) -> bytes:
         result.append(int(str(iii), 16))
     return bytes(result)
 
+### start scanning
 def fscan(duration: int = 15) -> None:
     global VGLOB
     global VWORK_LIST
@@ -126,12 +127,14 @@ def fscan(duration: int = 15) -> None:
     #VWORK_LIST['00:00:00:00:00:00'][4] = None
     return
 
+###
 def fntp() -> None:
     print('= set time ntp')
     VGLOB['timentp'] = time.time()
     ntptime.settime()
     return
 
+###
 def faddwork() -> None:
     # function for adding work
     # should check where to add the work, and if this or similar work exists
@@ -141,10 +144,6 @@ def faddwork() -> None:
 def fdisconnect() -> None:
     # disconnect and clean up, with all error catching etc
     pass
-
-#def fprint() -> None:
-#    for addr, val in VWORK_LIST:
-#        print('== ', str(addr), ' - ', str(val))
 
 #-####
 #-####
@@ -188,13 +187,9 @@ def fble_write(addr: str, data1: str, data2: str='') -> None:
     try:
         fhandle = VWORK_LIST[addr][2]
         #ble.gattc_write(VGLOB['handle'], data1, data2, 1)
+        ### BLE WRITE
         ble.gattc_write(fhandle, data1, data2, 1)
         print('= fblew write')
-        # for jjj in range(60):
-        #    #print('--- wait for connect')
-        #    f VGLOB['status'] != 8:
-        #        continue
-        #    time.sleep(0.5)
     except Exception as e:
         print('- fblew exc write:', e)
     #
@@ -698,7 +693,9 @@ IP: """ + str(station.ifconfig()[0]) + """
 <h2>---</h2>
 </body>
 </html>"""
-    html = html.encode('ascii')
+    #html = html.encode('ascii')
+    html = html.encode('latin-1')
+    print('= f generating page')
     #
     gc.collect()
     #
@@ -715,7 +712,7 @@ async def loop_web(reader, writer) -> None:
     await asyncio.sleep(0.1)
     recv = yield from reader.read(64)
     flood = 0
-    if gc.mem_free() < 10000:
+    if gc.mem_free() < 20000:
         print('+ page flood 1')
         #GET / HTTP/1.1
         flood = 1
@@ -902,7 +899,7 @@ To disable webrepl, delete webrepl_cfg.py and reboot device.
 
 Dir: """ + str(os.listdir()) + """
 
-Current work: """ + str(VGLOB) + """
+Global variables and settings: """ + str(VGLOB) + """
 
 Details:\n""" +  "\n".join( [ str(aaa) for aaa in VWORK_LIST.items() ] ) + """
 
@@ -914,7 +911,7 @@ Reset cause: """ + str(reset_cause) + """
 Micropython version: """ + str(os.uname()) + """
 Free RAM (over 40k is fine, 70k is good): """ + str(gc.mem_free()) + """."""
         #
-        vwebpage = vwebpage.encode('ascii')
+        vwebpage = vwebpage.encode('latin-1')
         #
         header = """HTTP/1.1 200 OK
 Content-Type: text/plain
@@ -965,6 +962,9 @@ Scan scheduled.
         # await writer.awrite(vwebpage)
         # machine.reset()
     elif request == "/mqttauto":
+        VGLOB['timework'] = time.time()+30
+        VGLOB['timescan'] = time.time()+30
+        VGLOB['timedisc'] = time.time()+30
         fdisc()
         header = """HTTP/1.1 200 OK
 Content-Type: text/html
@@ -996,9 +996,10 @@ Old devices removed from the list and if necessary the work status was reset.
     #####
     elif request == "/ota":
         # postpone job, to speed up ota
-        VGLOB['timework'] = time.time()+120
-        VGLOB['timescan'] = time.time()+180
-        ble.gap_scan( 0 )
+        VGLOB['timework'] = time.time()+30
+        VGLOB['timescan'] = time.time()+30
+        VGLOB['timedisc'] = time.time()+30
+        #ble.gap_scan( 0 )
         # method="post"
         vwebpage = """<pre>Usually upload main.py file. Sometimes boot.py file. Binary files do not work yet.
 <br/>
@@ -1020,8 +1021,9 @@ Connection: close
     #####
     elif request == "/otado":
         # postpone job, to speed up ota
-        VGLOB['timework'] = time.time()+120
-        VGLOB['timescan'] = time.time()+180
+        VGLOB['timework'] = time.time()+30
+        VGLOB['timescan'] = time.time()+30
+        VGLOB['timedisc'] = time.time()+30
         vwebpage = ''
         #VGLOB = ''
         VSCAN_LIST = {}
@@ -1034,7 +1036,7 @@ Connection: close
 
 """
         # =
-        ble.active(False)
+        #ble.active(False)
         gc.collect()
         #headerin = conn.recv(500).decode()
         headerin = yield from reader.read(500)
@@ -1111,11 +1113,14 @@ Connection: close
         #print( namein )
         #print( lenin )
         dataaa = ''
-        ble.active(True)
+        #ble.active(True)
         #gc.collect()
     #####
     #####
     elif request == "/reset":
+        VGLOB['timework'] = time.time()+30
+        VGLOB['timescan'] = time.time()+30
+        VGLOB['timedisc'] = time.time()+30
         header = """HTTP/1.1 200 OK
 Content-Type: text/html
 Content-Length: 34
@@ -1144,7 +1149,7 @@ Connection: close
         # await writer.awrite(vwebpage)
         # conn.close()
         # time.sleep(2) # no sleep here ;)
-        await asyncio.sleep(0.1) # was 0.3
+        await asyncio.sleep(0.3) # was 0.3, 0.1 was not good
         machine.reset()
         # time.sleep(1)
     #####
@@ -1173,15 +1178,21 @@ Connection: close
     # drain and sleep needed for good transfer
     vwebpage = b''
     resp = b''
-    # was 0.2
-    await asyncio.sleep(0.1)
+    # was 0.2, 0.1 is not good
+    await asyncio.sleep(0.2)
     await reader.wait_closed()
     # await reader.aclose()
     gc.collect()
     #print("-- f serving page done")
-    if not CONFIG2['loop']:
-        _thread.exit()
-        return
+    try:
+        # if run as thread, then stop thread
+        if not CONFIG2['loop']:
+            _thread.exit()
+            return
+        #pass
+    except Exception as e:
+        # if this fails, there is no reason to panic, function not in thread
+        print('- loop_web close thread:', e)
         # break
     # catch OSError: [Errno 104] ECONNRESET ?
 
@@ -1202,7 +1213,7 @@ def fcheck(var=None) -> None:
     except Exception as e:
         print('- fcheck wdt error, maybe not initialised ', e)
     ###
-    if int(gc.mem_free()) < 30000:
+    if int(gc.mem_free()) < 20000:
         print('- fcheck memory full')
         gc.collect()
         return
@@ -1413,6 +1424,7 @@ def fmqtt_recover(var=None) -> None:
 
 # -#### mqtt
 # -#### this is moved from boot, to allow recovery
+#_thread.stack_size(1024)
 _thread.start_new_thread(fmqtt_recover, ())
 # wait for connection at boot
 time.sleep(2)
@@ -1460,7 +1472,7 @@ time.sleep(2)
 # 4-5 seconds is completely fine for work
 #
 timer_work.init( period = ( VGLOB['delaywork'] * 1000 ), callback=fworker)
-# ### clean every 1 minutes
+# ### clean every x minutes, multiplied by 1000, as this is in ms
 #_thread.start_new_thread(fble_write, (fworkout, worka[0], worka[1]))
 
 #

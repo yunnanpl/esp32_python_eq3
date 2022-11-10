@@ -1,3 +1,4 @@
+# -*- coding: latin-1 -*-
 #-### secret_cfg.py
 
 #-### variables / configuration

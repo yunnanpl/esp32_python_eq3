@@ -1,3 +1,4 @@
+# -*- coding: latin-1 -*-
 import usocket as socket
 import uselect
 from utime import ticks_add,ticks_ms,ticks_diff

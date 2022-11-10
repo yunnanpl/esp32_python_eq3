@@ -1,3 +1,4 @@
+# -*- coding: latin-1 -*-
 # -### boot.py
 
 # Done by Dr.JJ
