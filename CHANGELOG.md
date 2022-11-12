@@ -14,10 +14,23 @@
    + improved web/sessions - more responsive
    + improved links (upload and reset requires confirmation)
    + added more clear descriptions
-   + precompiled the external libraries to save memory and space (simple2.py)
+   - precompiled the external libraries to save memory and space (simple2.py)
+     + precompilation was removed, as for every micropython version a new precompiled file might be needed
 
 # Changes
- - aefe81f65f3c2fef65815d7d30bba139bcde0b8d
+ - planned
+   - BLE detections with lower signal than -92 are ignored
+ - 7a5f011
+   - EQ3 now sends valve open value and battery status (also with home assistant autodiscovery
+   - web OTA and some other pages, postpone BLE actions to improve responsibility of the webpage
+   - precompiled MPY files are dropped, due to issues with compatibility with different micropython versions
+   - all files (also config and simple2) and outputs (page) are now latin-1 encoded (not utf-8)
+     - this seems to lower and stabilize the memory use, at the cost of using special characters
+   - presence for BLE beacons (or some smart watches, like Mi Band) detection is added, but works unstable
+   - temperature range selection is expanded to full EQ3 range (5 to 29.5)
+     - it does not always work at the start, as new autodiscovery messages need to be sent
+   - BUG: wrong byte for valve open was extracted
+ - aefe81f
    - significant code rewrite (cleaning pending)
    - automatic time NTP querying
    - automatic MQTT autodiscovery for Home Assistant
