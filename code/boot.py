@@ -1,4 +1,4 @@
-# -*- coding: latin-1 -*-
+# -*- coding: ascii -*-
 # -### boot.py
 
 # Done by Dr.JJ
@@ -8,6 +8,9 @@
 #-###
 # -### imports, also CONFIG and settings
 #
+import micropython
+micropython.opt_level(3)
+micropython.alloc_emergency_exception_buf(100)
 import uasyncio as asyncio
 import _thread
 import network
@@ -129,7 +132,7 @@ except:
 
 # ble.config(rxbuf=256)
 #ble.config(rxbuf=512)
-#ble.config(mtu=515)
+ble.config(mtu=128)
 # ble.config(gap_name=b'ESP32_5')
 #ble.config( gap_name='ESP32_'+str(ble.config('mac')[1][5]))
 device_name = 'ESP32_' + str(station.ifconfig()[0].split('.')[3])
@@ -146,6 +149,6 @@ print('= mqtt ping', str(time.ticks_ms() - mqtth.last_cpacket) )
 print('+ booted')
 
 gc.collect()
-gc.threshold(40000) # ???
+gc.threshold(10000) # ??? was 40000
 # -### BOOTED
 # -### end
