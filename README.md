@@ -27,6 +27,7 @@ The syntax is still simpler than esp32_mqtt_eq3.
 Serial or WebREPL can be used. THere are some useful functions on the device.
 
 Script works and is being tested with **EQ3 Thermostats Firmware 1.20** (so the one without 6 digits pairing).
+It may work with older and newer version, but probably not the one with pairing.
 
 ## Tests
 The aim is stability.
