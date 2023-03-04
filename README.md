@@ -28,6 +28,7 @@ Serial or WebREPL can be used. THere are some useful functions on the device.
 
 Script works and is being tested with **EQ3 Thermostats Firmware 1.20** (so the one without 6 digits pairing).
 It may work with older and newer version, but probably not the one with pairing.
+(Probably does not work with 1.1 or older, but probably does work with 1.4.6, still do not change the firmware if it works fine).
 
 ## Tests
 The aim is stability.
