@@ -99,6 +99,8 @@ try:
     ntptime.host = CONFIG2['ntp_host']
     ntptime.settime()
 except:
+    ntptime.host = "2.europe.pool.ntp.org"
+    ntptime.settime()   
     pass
 # print('LOG NTP time set')
 

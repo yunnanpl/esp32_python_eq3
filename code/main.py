@@ -10,7 +10,7 @@ add other temperature sensors
 # ### define global variables
 VGLOB = {}
 #
-VGLOB['ver'] = '50_21-230210'
+VGLOB['ver'] = '51_27-230923'
 # version details: ascii, ram clean, shorter delays, stability, fix ble-wifi-mqtt
 #
 VGLOB['status'] = 8  # 8=disconnected
@@ -146,7 +146,10 @@ def fscan(duration: int = 20) -> None:
         #print( ffaddr, VWORK_LIST[ffaddr][1] )
         #VGLOB['timework'] = time.time() + int( duration * (2/3) )
         if ffaddr != '00:00:00:00:00:00':
-            VWORK_LIST[ffaddr][1] = time.time() + int( duration * (2/3) )
+            ### postpone all work
+            #VWORK_LIST[ffaddr][1] = time.time() + int( duration * (2/3) )
+            ### v51_27 changed to 1 sec, otherwise no work is done
+            VWORK_LIST[ffaddr][1] = time.time() + 1
     ###
     try:
         #fpostpone(5) #maybe not necessary 50_11
@@ -421,9 +424,10 @@ def fble_irq(event, data) -> None:
             # datas 5 is temperature
             # datas 3 is probably valve open value
             # datas for battery ?
-            batt_out = "OK"
+            ### v51_23 changed into integer due to 202308 HASS change
+            batt_out = "100"
             if int(datas[2]) > 70:
-                batt_out = "LOW"
+                batt_out = "0"
             msg_out = '{"trv":"' + addrd + '","temp":"' + str(float(datas[5]) / 2) + '","valve":"' + str(int(datas[3])) + '","battery":"' + str(batt_out) + '","mode":"manual","mode2":"heat"}'
             #topic_out = CONFIG2['mqtt_eq3_out']
             topic_out = CONFIG2['mqtt_eq3'] + mac + '/radout/status'
@@ -562,6 +566,7 @@ def fworker(var=None) -> None:
         print('- worker mqtt check error ', e)
         ferror_log("fworker mqtt check error")
         #time.sleep(0.5)
+        #fmqtt_recover() ### do not add this here, it should be fixed automatically
         return ### ADDED
     ###
     if max(int(aaa[2] or 0) for aaa in VWORK_LIST.values()) > 3:
@@ -657,9 +662,9 @@ def fworker(var=None) -> None:
             print('= worker tried a few times, delaying')
             # this happens also too often, not logging
             #ferror_log("fworker connection issue")
-            VWORK_LIST[fworkout][1] = ftimenow
+            VWORK_LIST[fworkout][1] = ftimenow + 120 ### v51_25 adding 2 minutes
             VWORK_LIST[fworkout][5] = None
-            if len(VWORK_LIST[fworkout][4]) > 10:
+            if len(VWORK_LIST[fworkout][4]) > 5: ### v51_25 was 10 is 5
                 ### too much work, removing
                 VWORK_LIST[fworkout][4].pop(0)
             #gc.collect()
@@ -680,13 +685,14 @@ def fworker(var=None) -> None:
             except Exception as e:
                 print('- worker disconn warn 3 ', e)
                 #VWORK_LIST[fworkout][0] = ftimenow
-                VWORK_LIST[fworkout][1] = ftimenow
+                VWORK_LIST[fworkout][1] = ftimenow + 120 ### v51_24 added 2 minutes wait
+                #VWORK_LIST[fworkout][1] = ftimenow
                 VWORK_LIST[fworkout][2] = None
                 VWORK_LIST[fworkout][3] = 8
             ferror_log("fworker connection too long")
         # return
     ###
-    elif VWORK_LIST[fworkout][3] == 8:
+    elif VWORK_LIST[fworkout][3] == 8 and ftimenow > VWORK_LIST[fworkout][1]: ### v51_25 added time check
         ### finally, all abouve is fine, and work is to be done, so connect first
         print("= worker connecting")
         # longer waiting times
@@ -728,6 +734,7 @@ def fworker(var=None) -> None:
     ###
     ### some other situation happened
     else:
+        fscan(30) ### v51_26 added, if nothing happens then scan
         print('- worker unexpected situation')
         ferror_log("fworker unexpected situation")
     gc.collect()
@@ -1273,7 +1280,7 @@ Connection: close
     vwebpage = b''
     resp = b''
     # was 0.2, 0.1 is not good
-    await asyncio.sleep(0.4)
+    await asyncio.sleep(0.3)
     # waiting until everything is sent, to close
     await reader.wait_closed()
     # await reader.aclose()
@@ -1341,7 +1348,7 @@ def fcheck(var=None) -> None:
         ferror_log("fcheck ble error")
         #fpostpone(5)
         ble.active(False) ### ADDED
-        time.sleep(0.1)   ### ADDED, was 0.5
+        #time.sleep(0.1)   ### ADDED, was 0.5
         ble.active(True)
         #gc.collect()
         return
@@ -1443,7 +1450,7 @@ def fdisc(var=None) -> None:
     ###
     ### loop through all trusted devices
     for hhh in VWORK_LIST:
-        time.sleep(0.2) # was 0.5
+        time.sleep(0.1) # was 0.5
         #mac = str(hhh[9:17].replace(":", ""))
         mac = str(hhh.replace(":", "")[6:12])
         mac_type = str(hhh.replace(":", "")[0:6])
@@ -1454,7 +1461,7 @@ def fdisc(var=None) -> None:
             #mac = str(hhh[9:17].replace(":", ""))
             ###
             topict = f'homeassistant/sensor/temp_{mac}_temp/config'
-            devid = '"device": { "identifiers": [ "temp_' + mac + '" ], "name":"temp_' + mac + '", "model":"JJ ESP32 Temp", "sw_version":"' + VGLOB["ver"] + '" }'
+            devid = '"device": { "identifiers": [ "temp_' + mac + '_id" ], "name":"temp_' + mac + '_dev", "model":"JJ ESP32 Temp", "sw_version":"' + VGLOB["ver"] + '" }'
             devicet = '{"device_class": "temperature", "name": "Mijia ' + mac + ' Temperature", \
 "state_topic": "' + CONFIG2["mqtt_thermo"] + mac + '/radout/status", "unit_of_measurement": "°C", "value_template": "{{ value_json.temp }}", \
 "unique_id": "temp_' + mac + '_T", ' + devid + ' }'
@@ -1477,7 +1484,7 @@ def fdisc(var=None) -> None:
                 currtemp = '"curr_temp_t": "' + CONFIG2['mqtt_thermo_src'] + '/radout/status", "curr_temp_tpl": "{{value_json.temp}}", '
             else:
                 currtemp = ""
-            devid = '"device": { "identifiers": [ "clim_' + mac + '_id" ], "name": "clim_eq3_' + mac + '", "model":"JJ ESP32 Clim EQ3", "sw_version":"' + VGLOB["ver"] + '" }'
+            devid = '"device": { "identifiers": [ "clim_' + mac + '_id" ], "name": "clim_eq3_' + mac + '_dev", "model":"JJ ESP32 Clim EQ3", "sw_version":"' + VGLOB["ver"] + '" }'
             devicec = '{ "name": "clim_eq3_' + mac + '", "unique_id": "clim_' + mac + '_thermostat_id", "modes": [ "heat" ], ' + devid + ', \
 "mode_cmd_t": "' + CONFIG2['mqtt_eq3'] + mac + '/radin/mode2", "mode_stat_t": "' + CONFIG2['mqtt_eq3'] + mac + '/radout/status", \
 "mode_stat_tpl": "{{value_json.mode2}}", "temp_cmd_t": "' + CONFIG2['mqtt_eq3'] + mac + '/radin/temp", \
@@ -1501,7 +1508,7 @@ def fdisc(var=None) -> None:
         if mac_type[0:4] == 'FFFF':
             #topicp = f'homeassistant/sensor/presence_{mac}_eq3/config'
             topicp = f'homeassistant/device_tracker/presence_{mac}_eq3/config'
-            devid = '"device": { "identifiers": [ "tracker_' + mac + '" ], "name": "tracker_' + mac + '", "model":"JJ ESP32 Tracker", "sw_version":"' + VGLOB["ver"] + '" }'
+            devid = '"device": { "identifiers": [ "tracker_' + mac + '_id" ], "name": "tracker_' + mac + '_dev", "model":"JJ ESP32 Tracker", "sw_version":"' + VGLOB["ver"] + '" }'
             devicep = '{"name": "Tracker ' + mac + '", "state_topic": "' + CONFIG2["mqtt_presence"] + mac + '/radout/status", ' + devid + ', \
 "expire_after": "240", "consider_home": "180", "unique_id": "tracker_' + mac + '", "source_type": "bluetooth" }'
             mqtth.publish(topicp, bytes(devicep, 'ascii'), True)
@@ -1524,12 +1531,12 @@ def fmqtt_recover(var=None) -> None:
     mqtth.keepalive = int(3.5 * VGLOB['delaycheck'])
     #time.sleep(0.5)
     mqtth.connect()
-    time.sleep(0.1) # ???
+    #time.sleep(0.1) # ???
     mqtth.set_callback(fmqtt_irq)
     #time.sleep(0.5)
     for lll in VMQTT_SUB_LIST:
         mqtth.subscribe(lll)
-        time.sleep(0.1) # ???
+        #time.sleep(0.1) # ???
     # mqtth.subscribe(CONFIG2['mqtt_eq3_in'])
     VGLOB['status'] = 8
     #gc.collect()
@@ -1558,13 +1565,13 @@ def fstart_server() -> None:
 _thread.start_new_thread(fmqtt_recover, ())
 # wait for connection at boot
 # wait longer, was 2, but warning at boot
-time.sleep(2) # shortened from 4 in 50_8
+time.sleep(1) # shortened from 4 in 50_8
 
 #-####
 #-####
 # -#### connect interrupts
 ble.irq(fble_irq)
-time.sleep(2) # 2 in 50_8
+time.sleep(1) # 2 in 50_8
 
 #-####
 #-####
@@ -1587,8 +1594,6 @@ time.sleep(1)
 #-####
 # -#### first scan, longer
 # if this is on, then something other fails...
-fdisc()
-time.sleep(1)
 fntp()
 
 #fscan(60) # change 50_17 not necessary here, as it will start automatically
@@ -1606,6 +1611,10 @@ timer_work.init( period = ( VGLOB['delaywork'] * 1000 ), callback=fworker)
 time.sleep(1)
 #
 timer_check.init( period = ( VGLOB['delaycheck'] * 1000 ), callback=fcheck)
+
+time.sleep(1)
+# this requires mqtt, so at the end
+fdisc()
 
 # no timers to save timers ;)
 
