@@ -1,16 +1,13 @@
 # -*- coding: ascii -*-
 # -### boot.py
 
-# Done by Dr.JJ
-# https://github.com/yunnanpl/esp32_python_eq3
-
 #-###
 #-###
 # -### imports, also CONFIG and settings
 #
 import micropython
 micropython.opt_level(3)
-micropython.alloc_emergency_exception_buf(100)
+micropython.alloc_emergency_exception_buf(1) # was 100
 import uasyncio as asyncio
 import _thread
 import network
@@ -19,25 +16,12 @@ import time
 import ubluetooth
 import gc
 import simple2 as umqtt
-#import robust2 as umqtt
-#from collections import OrderedDict
 import os
 from secret_cfg import *
 # speedup/slow down for energy saving :)
 import machine
 machine.freq(CONFIG['freq'])
 #
-# import re
-# import robust2 as umqtt
-# import socket
-# not necessary
-# from micropython import const
-#
-# other modules
-# from machine import Pin, DAC, PWM, ADC, SoftI2C
-# from machine import Pin
-# import umqtt
-# import math
 
 gc.enable()
 
@@ -75,8 +59,6 @@ timer_check = machine.Timer(1)
 try:
     station = network.WLAN(network.STA_IF)
     station.active(True)
-    # station.connect( CONFIG['wifi_name'], binascii.a2b_base64( CONFIG['wifi_pass'] ) )
-    # CONFIG['wifi_name'] = "asdasd"
     station.connect(CONFIG['wifi_name'], "".join([chr(x) for x in CONFIG['wifi_pass']]))
 except:
     pass
@@ -99,8 +81,7 @@ try:
     ntptime.host = CONFIG2['ntp_host']
     ntptime.settime()
 except:
-    ntptime.host = "2.europe.pool.ntp.org"
-    ntptime.settime()   
+    ### v52_04 if no server available, set no time, in case if no internet
     pass
 # print('LOG NTP time set')
 
@@ -133,10 +114,7 @@ except:
 #-### some other settings
 
 # ble.config(rxbuf=256)
-#ble.config(rxbuf=512)
-ble.config(mtu=128)
-# ble.config(gap_name=b'ESP32_5')
-#ble.config( gap_name='ESP32_'+str(ble.config('mac')[1][5]))
+# ble.config(mtu=128)
 device_name = 'ESP32_' + str(station.ifconfig()[0].split('.')[3])
 ble.config(gap_name=device_name)
 
@@ -150,7 +128,8 @@ print('= time', ntptime.time() )
 print('= mqtt ping', str(time.ticks_ms() - mqtth.last_cpacket) )
 print('+ booted')
 
+del micropython
 gc.collect()
-gc.threshold(10000) # ??? was 40000
+gc.threshold(20000) # ??? was 40000, was 10000
 # -### BOOTED
 # -### end
