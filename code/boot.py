@@ -5,16 +5,18 @@
 #-###
 # -### imports, also CONFIG and settings
 #
+import gc
+gc.enable()
+gc.threshold(20000) # ??? was 40000, was 10000
 import micropython
 micropython.opt_level(3)
 micropython.alloc_emergency_exception_buf(1) # was 100
-import uasyncio as asyncio
-import _thread
+#import uasyncio as asyncio #moved to main
+#import _thread #moved to main
 import network
 import ntptime
 import time
 import ubluetooth
-import gc
 import simple2 as umqtt
 import os
 from secret_cfg import *
@@ -22,8 +24,6 @@ from secret_cfg import *
 import machine
 machine.freq(CONFIG['freq'])
 #
-
-gc.enable()
 
 #-###
 #-### CONFIG compatibility
@@ -130,6 +130,5 @@ print('+ booted')
 
 del micropython
 gc.collect()
-gc.threshold(20000) # ??? was 40000, was 10000
 # -### BOOTED
 # -### end
