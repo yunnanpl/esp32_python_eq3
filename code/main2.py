@@ -44,20 +44,27 @@ def faddwork() -> None:
     return
 
 # v53_19 moved
-def freset(time, machine):
+def freset(time, machine, VWORK_LIST):
     ### v52_08 reset function wrap
     ### TODO, add some functions like time save, job save, etc.
-    fff = open('temp.txt', 'w')
-    fff.close()
+    #fff1 = open('temp.txt', 'w')
+    #fff1.close()
+    fff2 = open('temp.txt', 'w')
+    fff2.write( str(VWORK_LIST) )
+    fff2.close()
     #del fff
     time.sleep(0.2)
     #await fff.write("PASS = \'1234\'\n")
     machine.reset()
 
 # v53_19 moved
-def fdisconnect() -> None:
+def fdisconnect(ble, handle = 0) -> None:
     # disconnect and clean up, with all error catching etc
-    pass
+    try:
+        ble.gap_disconnect(handle)
+    except:
+        # problem...
+        return 1
     return
 
 # v53_19 moved

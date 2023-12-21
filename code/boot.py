@@ -7,10 +7,10 @@
 #
 import gc
 gc.enable()
-gc.threshold(20000) # ??? was 40000, was 10000
+gc.threshold(30000) # ??? was 40000, was 10000
 import micropython
 micropython.opt_level(3)
-micropython.alloc_emergency_exception_buf(1) # was 100
+micropython.alloc_emergency_exception_buf(2) # was 100
 #import uasyncio as asyncio #moved to main
 #import _thread #moved to main
 import network
@@ -96,7 +96,8 @@ except:
 
 try:
     mqtth = umqtt.MQTTClient(CONFIG2['mqtt_usr'], CONFIG2['mqtt_srv'], user=CONFIG2['mqtt_usr'], password=CONFIG2['mqtt_pass'], port=1883)
-    mqtth.keepalive = 180
+    #mqtth.keepalive = 180
+    mqtth.keepalive = 90
     while mqtth.connect() == 1:
         time.sleep(0.5)
         # if not conencted in 20 sec, then restart

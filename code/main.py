@@ -9,8 +9,8 @@ add other temperature sensors
 """
 
 CONFIG2['__author__'] = "Dr.JJ"
-CONFIG2['__version__'] = '54_03' #2023 11 27
-CONFIG2['debug'] = 10
+CONFIG2['__version__'] = '54_09' #2023 12 20
+CONFIG2['debug'] = 0
 
 # send print to dev null if not debug, verbose
 def print2(*args, **kwargs):
@@ -21,7 +21,7 @@ def print2(*args, **kwargs):
     # else print nothing, to dev null
     #else:
     #    pass
-    loglenght = 10
+    loglenght = 5
     #
     if CONFIG2['debug'] == 10:
         global ERRORLOG
@@ -65,22 +65,36 @@ VMQTT_SUB_LIST = []
 VMQTT_SUB_LIST.append( CONFIG2['mqtt_eq3_in'] )
 
 try:
-    wl = open('wl.txt', 'r')
-    vwork_temp = eval(str(wl.read()))
+    # load white list
+    fff = open('wl.txt', 'r')
+    vwork_temp = str( fff.read() )
+    vwork_temp = eval( vwork_temp )
     for jjj, val in vwork_temp.items():
-        VWORK_LIST[jjj] = [val[0], time.time() + 60, None, 8, [], None]
+        VWORK_LIST[jjj] = [val[0], time.time() + 30, None, 8, [], None]
         #mac = str( jjj[9:17].replace(":", "") )
         mac = str(jjj.replace(":", "")[6:12])
         VMQTT_SUB_LIST.append(f'{CONFIG2['mqtt_eq3']}{mac}/radin/mode')
         VMQTT_SUB_LIST.append(f'{CONFIG2['mqtt_eq3']}{mac}/radin/temp')
-    wl.close()
-    del vwork_temp, jjj, wl, val, mac
+    fff.close()
+    # load saved work list
+    fff = open('temp.txt', 'r')
+    vwork_temp = str( fff.read() )
+    if len( vwork_temp ) > 10:
+        vwork_temp = eval( vwork_temp )
+        for jjj, val in vwork_temp.items():
+            VWORK_LIST[jjj][4] = val[4]
+    fff.close()
+    ## cleanup temp.txt
+    fff = open('temp.txt', 'w')
+    fff.close()
+    #
+    del vwork_temp, jjj, fff, val, mac
     print2("BOOT config loaded")
     #gc.collect()
 except Exception as e:
-    print2('BOOT load wl failed, setting default, this is ok ', e)
+    print2('BOOT load fff failed, setting default, this is ok ', e)
     # if the above fails for whatever reason, start with clean white list
-    VWORK_LIST['00:00:00:00:00:00'] = ["system", time.time() + 60, None, 8, [], None]
+    VWORK_LIST['00:00:00:00:00:00'] = [None, time.time() + 30, None, 8, [], None]
     print2("BOOT empty config created")
 
 #-####
@@ -317,11 +331,12 @@ def fble_irq(event, data) -> None:
         #del addr_type
         #del addr
         #print2( addrd )
-        # do not change the time with connect, but only disconnect
+        # do not change the time with connect, but time changes only if irq successful
         #VWORK_LIST[ addrd ][1] = time.time()
         VWORK_LIST[addrd][1] = time.time()
         VWORK_LIST[addrd][2] = handle
         VWORK_LIST[addrd][3] = event
+        print2('fbleirq connected')
     elif event == 8:  # _IRQ_PERIPHERAL_DISCONNECT
         # ### disconnected 8, do actions
         gc.collect()
@@ -438,8 +453,14 @@ def fble_irq(event, data) -> None:
         # go to status 7 if still work to do # 50_20
         if len( VWORK_LIST[addrd][4] ) > 0:
             VWORK_LIST[addrd][3] = 7
+            print2('fbleirq writing-notify success, but more work')
+        else:
+            print2('fbleirq writing-notify success, disconnecting')
+            fdisconnect(ble, value_handle) # was ble.gap_disconnect
         ###
-        #gc.collect()
+        gc.collect()
+        # check if here the value changes to 8
+        # as connection cleanup is missing
     else:
         # catch some other ble connection values
         print2('fbleirq unknown ble status')
@@ -517,7 +538,7 @@ def fmqtt_irq(topic, msg, aaa=False, bbb=False) -> None:
         elif worka[0] == 'reset':
             # reset
             # machine.reset()
-            freset(time, machine)
+            freset(time, machine, VWORK_LIST)
     # ### if above not true and address not in the list, then skip
     gc.collect()
     # _thread.exit()
@@ -626,7 +647,8 @@ def fworker(var=None) -> None:
         if VWORK_LIST[fworkout][2] != None:
             ### if handle exists, but no work, then disconnect, or if connection count eq 3
             try:
-                ble.gap_disconnect(VWORK_LIST[fworkout][2])
+                #ble.gap_disconnect(VWORK_LIST[fworkout][2])
+                fdisconnect(ble, VWORK_LIST[fworkout][2])
             except Exception as e:
                 print2('fworker disconn warn 1 ', e)
                 VWORK_LIST[fworkout][2] = None
@@ -659,13 +681,17 @@ def fworker(var=None) -> None:
             ### v52_42 add more, as there were 5 retries
             try:
                 #ble.gap_disconnect(VWORK_LIST[fworkout][2])
-                ble.gap_disconnect(1)
-            except:
+                #ble.gap_disconnect(0)
+                #ble.gap_disconnect(1)
+                print2('fworker connect cleanup pending ', fworkout)
+                fdisconnect(ble, 0)
+                fdisconnect(ble, 1)
                 VWORK_LIST[fworkout][1] = ftimenow + errordelay
                 VWORK_LIST[fworkout][3] = 8
                 VWORK_LIST[fworkout][5] = None
+            except:
                 print2('fworker connect cleanup failed ', fworkout)
-                #pass
+                pass
             if len(VWORK_LIST[fworkout][4]) > 4: ### v51_25 was 10 is 4, how many tasks are in the list
                 ### too much work, removing
                 VWORK_LIST[fworkout][4].pop(0)
@@ -686,7 +712,8 @@ def fworker(var=None) -> None:
 #        if ftimenow - VWORK_LIST[fworkout][1] > 10:
         if ftimenow - VWORK_LIST[fworkout][1] > ( VGLOB['delaywork'] * len(VWORK_LIST) ) + 5:
             try:
-                ble.gap_disconnect(VWORK_LIST[fworkout][2])
+                #ble.gap_disconnect(VWORK_LIST[fworkout][2])
+                fdisconnect(ble, VWORK_LIST[fworkout][2])
             except Exception as e:
                 print2('fworker disconn warn 3 ', e)
                 #VWORK_LIST[fworkout][1] = ftimenow + 120 ### v51_24 added 2 minutes wait
@@ -737,7 +764,9 @@ def fworker(var=None) -> None:
                 try:
                     #ble.gap_disconnect(0) # v53_21 changed from 0, to an actual value
                     #ble.gap_disconnect(VWORK_LIST[fworkout][2])
-                    ble.gap_disconnect(1)
+                    #ble.gap_disconnect(1)
+                    fdisconnect(ble, 0)
+                    fdisconnect(ble, 1)
                     VWORK_LIST[fworkout][1] = ftimenow + errordelay
                     VWORK_LIST[fworkout][3] = 8 # v53_15
                     VWORK_LIST[fworkout][5] = None # v53_21
@@ -763,7 +792,8 @@ def fworker(var=None) -> None:
             VWORK_LIST[fworkout][5] = None
             ###
             print2("fworker, connected, but no work, disconnect")
-            ble.gap_disconnect(VWORK_LIST[fworkout][2])
+            #ble.gap_disconnect(VWORK_LIST[fworkout][2])
+            fdisconnect(ble, VWORK_LIST[fworkout][2])
             ### v52_01 - cleaning
             gc.collect()
             return
@@ -1263,7 +1293,7 @@ Connection: close
         ### v52_10
         ### added wait time, so that header is nicely sent
         await asyncio.sleep(0.3)
-        freset(time, machine)
+        freset(time, machine, VWORK_LIST)
         #ble.active(True)
         #gc.collect()
     #####
@@ -1300,7 +1330,7 @@ Connection: close
         # time.sleep(2) # no sleep here ;)
         await asyncio.sleep(0.3) # was 0.3, 0.1 was not good
         #machine.reset()
-        freset(time, machine)
+        freset(time, machine, VWORK_LIST)
         # time.sleep(1)
     #####
     #####
@@ -1399,12 +1429,13 @@ def fcheck(var=None) -> None:
     ftimenow = time.time()
     ###
     ###
-    # if still no work done
-    if ftimenow > ( VGLOB['timelast'] + ( VGLOB['delayquery'] * 3 ) ):
+    # if still no work done - enforce reset
+    # should be slightly longer than router or mqtt server reboot, just in case
+    if ftimenow > ( VGLOB['timelast'] + ( VGLOB['delayquery'] * 6 ) ):
         # 3 rounds no response, resetting
         print2('fcheck reset recover')
         ### here add job saving etc
-        freset(time, machine)
+        freset(time, machine, VWORK_LIST)
         #
     # v52_35 readded the check, if no work is done in a few rounds
     if ble.active() == False: #or ftimenow > ( VGLOB['timelast'] + (3 * VGLOB['delayquery'] ) ):
